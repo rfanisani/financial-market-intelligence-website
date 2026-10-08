@@ -1,0 +1,156 @@
+{
+  "fa": {
+    "siteName": "رصد بازار",
+    "tagline": "قیمت‌های کلیدی بازارهای مالی — سبک، سریع، بدون حاشیه",
+    "nav": { "home": "خانه", "gold": "طلا", "currency": "ارز", "oil": "نفت", "iranGold": "طلا و سکه ایران", "calculator": "ماشین‌حساب", "about": "درباره" },
+    "globalMarkets": "بازارهای جهانی",
+    "iranMarkets": "بازار ایران",
+    "goldSection": "طلا و سکه",
+    "impliedDollar": "دلار ضمنی",
+    "chart7d": "روند ۷ روزه",
+    "lastUpdate": "آخرین به‌روزرسانی",
+    "dataSources": "منابع داده",
+    "status": "وضعیت داده",
+    "fresh": "به‌روز",
+    "stale": "قدیمی",
+    "th": { "asset": "دارایی", "price": "قیمت", "change": "تغییر", "source": "منبع" },
+    "actualUsd": "دلار (بازار آزاد)",
+    "impliedUsd": "دلار ضمنی (طلای ۱۸)",
+    "impliedCoin": "دلار ضمنی (سکه)",
+    "difference": "اختلاف",
+    "diffPct": "اختلاف (%)",
+    "method": "روش محاسبه",
+    "methodNote": "دلار ضمنی یک نرخ محاسباتی است که از نسبت قیمت طلای داخلی به قیمت طلای جهانی به دست می‌آید. این مقدار نرخ رسمی یا قابل معامله نیست.",
+    "methodFormula": "دلار ضمنی = قیمت داخلی ÷ (وزن × عیار × قیمت هر گرم طلای جهانی) — هر گرم طلای جهانی = اونس ÷ ۳۱٫۱۰۳۴۷۶۸",
+    "legendImplied": "دلار ضمنی",
+    "legendActual": "دلار واقعی",
+    "calc": {
+      "title": "ماشین‌حساب دلار ضمنی",
+      "intro": "با قیمت طلای داخلی و جهانی، نرخ دلار ضمنی را حساب کنید؛ یا برعکس، از نرخ دلار، قیمت مورد انتظار طلا را ببینید.",
+      "fDomestic": "قیمت طلای داخلی (تومان)",
+      "fGlobal": "قیمت جهانی طلا (دلار/اونس)",
+      "fPurity": "عیار",
+      "fWeight": "وزن واحد (گرم)",
+      "p18": "طلای ۱۸ عیار (۰٫۷۵۰)",
+      "p24": "طلای ۲۴ عیار (۰٫۹۹۹)",
+      "pCoin": "سکه امامی (۰٫۹۰۰)",
+      "btn": "محاسبه",
+      "rImplied": "دلار ضمنی",
+      "rActual": "دلار واقعی (آزاد)",
+      "rDiff": "اختلاف",
+      "dir2": "دلار ← قیمت طلای مورد انتظار",
+      "fRate": "نرخ دلار (تومان)",
+      "rExpected": "قیمت مورد انتظار طلای ۱۸ عیار (تومان/گرم)",
+      "err": "مقادیر معتبر وارد کنید.",
+      "perUnit": "برای واحد انتخاب‌شده"
+    },
+    "about": {
+      "h": "درباره رصد بازار",
+      "p1": "رصد بازار یک سایت سبک و بدون حاشیه برای نمایش قیمت‌های کلیدی بازارهای جهانی و ایران است. هیچ حساب کاربری، تبلیغ یا ردیابی وجود ندارد و کل سایت کمتر از یک مگابایت است.",
+      "p2": "داده‌ها به‌صورت خودکار از منابع عمومی دریافت، اعتبارسنجی و در قالب فایل‌های ثابت منتشر می‌شود؛ تقریباً هر ۴ ساعت یک‌بار. برای هر داده، منبع و زمان به‌روزرسانی نمایش داده می‌شود. اگر دریافت داده شکست بخورد، آخرین داده معتبر حفظ می‌شود.",
+      "p3": "دلار ضمنی نرخ محاسباتی است: نسبت قیمت طلای داخلی به ارزش دلاری طلای جهانی با احتساب عیار و وزن. این نرخ با نرخ رسمی یا بازار آزاد می‌تواند اختلاف قابل توجهی داشته باشد.",
+      "p4": "سلب مسئولیت: داده‌ها صرفاً اطلاع‌رسانی است و توصیه سرمایه‌گذاری نیست. دقت کامل داده‌ها تضمین نمی‌شود."
+    },
+    "disclaimer": "داده‌ها صرفاً اطلاع‌رسانی است و توصیه سرمایه‌گذاری نیست.",
+    "sourcesNote": "داده‌ها از منابع عمومی جمع‌آوری و به‌صورت خودکار اعتبارسنجی می‌شود.",
+    "langOther": "English",
+    "skip": "پرش به محتوا",
+    "homeIntro": "نمای کلی بازارهای جهانی و ایران در یک نگاه."
+  },
+  "en": {
+    "siteName": "Market Radar",
+    "tagline": "Key financial market prices — light, fast, no clutter",
+    "nav": { "home": "Home", "gold": "Gold", "currency": "Currency", "oil": "Oil", "iranGold": "Iran Gold & Coins", "calculator": "Calculator", "about": "About" },
+    "globalMarkets": "Global Markets",
+    "iranMarkets": "Iran Market",
+    "goldSection": "Gold & Coins",
+    "impliedDollar": "Implied USD",
+    "chart7d": "7-Day Trend",
+    "lastUpdate": "Last update",
+    "dataSources": "Data sources",
+    "status": "Data status",
+    "fresh": "Fresh",
+    "stale": "Stale",
+    "th": { "asset": "Asset", "price": "Price", "change": "Change", "source": "Source" },
+    "actualUsd": "USD (free market)",
+    "impliedUsd": "Implied USD (18K)",
+    "impliedCoin": "Implied USD (coin)",
+    "difference": "Difference",
+    "diffPct": "Difference (%)",
+    "method": "Calculation method",
+    "methodNote": "Implied USD is a calculated rate derived from the ratio of domestic gold prices to global gold prices. It is not an official or tradable rate.",
+    "methodFormula": "Implied USD = domestic price ÷ (weight × purity × global gold per gram) — global gram = ounce ÷ 31.1034768",
+    "legendImplied": "Implied USD",
+    "legendActual": "Actual USD",
+    "calc": {
+      "title": "Implied USD Calculator",
+      "intro": "Derive the implied USD rate from domestic and global gold prices — or the reverse: the expected gold price for a given USD rate.",
+      "fDomestic": "Domestic gold price (toman)",
+      "fGlobal": "Global gold price (USD/oz)",
+      "fPurity": "Purity",
+      "fWeight": "Unit weight (grams)",
+      "p18": "18K gold (0.750)",
+      "p24": "24K gold (0.999)",
+      "pCoin": "Emami coin (0.900)",
+      "btn": "Calculate",
+      "rImplied": "Implied USD",
+      "rActual": "Actual USD (free market)",
+      "rDiff": "Difference",
+      "dir2": "USD → expected gold price",
+      "fRate": "USD rate (toman)",
+      "rExpected": "Expected 18K gold price (toman/gram)",
+      "err": "Please enter valid values.",
+      "perUnit": "for the selected unit"
+    },
+    "about": {
+      "h": "About Market Radar",
+      "p1": "Market Radar is a lightweight, no-clutter site for key global and Iranian market prices. No accounts, no ads, no tracking — the whole site is under one megabyte.",
+      "p2": "Data is automatically fetched from public sources, validated and published as static files roughly every 4 hours. Each value shows its source and update time. If a fetch fails, the last known good data is kept.",
+      "p3": "Implied USD is a calculated rate: the ratio of domestic gold prices to the USD value of global gold, adjusted for purity and weight. It can differ significantly from official or free-market rates.",
+      "p4": "Disclaimer: data is for information only and is not investment advice. Accuracy is not guaranteed."
+    },
+    "disclaimer": "Data is for information only and is not investment advice.",
+    "sourcesNote": "Data is collected from public sources and validated automatically.",
+    "langOther": "فارسی",
+    "skip": "Skip to content",
+    "homeIntro": "An overview of global and Iranian markets at a glance."
+  },
+  "srcNames": {
+    "seed": { "fa": "داده نمونه", "en": "Seed (sample)" },
+    "gold-api": { "fa": "Gold-API", "en": "Gold-API" },
+    "frankfurter": { "fa": "ECB (Frankfurter)", "en": "ECB (Frankfurter)" },
+    "stooq": { "fa": "Stooq", "en": "Stooq" },
+    "tgju": { "fa": "TGJU", "en": "TGJU" },
+    "manual": { "fa": "دستی", "en": "Manual" }
+  },
+  "pages": {
+    "home": {
+      "fa": { "t": "قیمت طلا، دلار و نفت | رصد بازار", "d": "قیمت لحظه‌ای طلا، سکه، دلار و نفت در بازارهای جهانی و ایران، به‌همراه محاسبه دلار ضمنی — سبک و سریع." },
+      "en": { "t": "Gold, USD & Oil Prices | Market Radar", "d": "Key gold, coin, dollar and oil prices across global and Iranian markets, with implied USD calculation — light and fast." }
+    },
+    "gold": {
+      "fa": { "t": "قیمت طلا و نقره | رصد بازار", "d": "قیمت جهانی طلا و نقره به دلار و قیمت طلای ۱۸ و ۲۴ عیار و سکه در بازار ایران.", "i": "قیمت جهانی فلزات گران‌بها و مقایسه با بازار داخلی طلا." },
+      "en": { "t": "Gold & Silver Prices | Market Radar", "d": "Global gold and silver prices in USD alongside Iranian 18K/24K gold and coin rates.", "i": "Global precious metal prices compared with the domestic Iranian gold market." }
+    },
+    "currency": {
+      "fa": { "t": "قیمت ارز و دلار | رصد بازار", "d": "نرخ ارزهای جهانی (یورو، پوند، ین) و نرخ دلار، یورو و پوند در بازار آزاد ایران.", "i": "نرخ ارزهای اصلی جهانی در کنار نرخ آزاد دلار در ایران." },
+      "en": { "t": "Currency & Dollar Rates | Market Radar", "d": "Major FX rates (EUR, GBP, JPY) and free-market USD, EUR and GBP rates in Iran.", "i": "Major global FX rates alongside Iran's free-market dollar rate." }
+    },
+    "oil": {
+      "fa": { "t": "قیمت نفت برنت و WTI | رصد بازار", "d": "قیمت نفت خام برنت و WTI به دلار در هر بشکه، با روند ۷ روزه.", "i": "قیمت دو بنچمارک اصلی نفت خام جهان." },
+      "en": { "t": "Brent & WTI Oil Prices | Market Radar", "d": "Brent and WTI crude oil prices in USD per barrel with a 7-day trend.", "i": "The two benchmark crude oils of the global market." }
+    },
+    "iran-gold": {
+      "fa": { "t": "قیمت طلا و سکه در ایران | رصد بازار", "d": "قیمت طلای ۱۸ و ۲۴ عیار، سکه امامی، نیم‌سکه و ربع‌سکه در بازار ایران.", "i": "قیمت‌های داخلی طلا و سکه بر اساس بازار آزاد تهران." },
+      "en": { "t": "Iran Gold & Coin Prices | Market Radar", "d": "18K and 24K gold, Emami, half and quarter coin prices in the Iranian market.", "i": "Domestic gold and coin prices based on Tehran's free market." }
+    },
+    "calculator": {
+      "fa": { "t": "ماشین‌حساب دلار ضمنی | رصد بازار", "d": "محاسبه دلار ضمنی از قیمت طلای داخلی و جهانی، و محاسبه قیمت مورد انتظار طلا از نرخ دلار.", "i": "دو جهت محاسبه: طلا به دلار ضمنی، و دلار به قیمت طلای مورد انتظار." },
+      "en": { "t": "Implied USD Calculator | Market Radar", "d": "Calculate the implied USD rate from domestic and global gold prices, or the expected gold price from a USD rate.", "i": "Both directions: gold to implied USD, and USD to expected gold price." }
+    },
+    "about": {
+      "fa": { "t": "درباره | رصد بازار", "d": "درباره رصد بازار، روش جمع‌آوری داده و سلب مسئولیت.", "i": "" },
+      "en": { "t": "About | Market Radar", "d": "About Market Radar, our data methodology and disclaimer.", "i": "" }
+    }
+  }
+}
