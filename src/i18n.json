@@ -53,6 +53,7 @@
     },
     "disclaimer": "داده‌ها صرفاً اطلاع‌رسانی است و توصیه سرمایه‌گذاری نیست.",
     "sourcesNote": "داده‌ها از منابع عمومی جمع‌آوری و به‌صورت خودکار اعتبارسنجی می‌شود.",
+    "secondarySource": "مرجع ثانویه (پشتیبان و مقایسه): ناوسان (Navasan) — در صورت در دسترس نبودن منبع اصلی، مقدار از این مرجع گرفته و در ستون منبع قید می‌شود.",
     "langOther": "English",
     "skip": "پرش به محتوا",
     "homeIntro": "نمای کلی بازارهای جهانی و ایران در یک نگاه."
@@ -111,6 +112,7 @@
     },
     "disclaimer": "Data is for information only and is not investment advice.",
     "sourcesNote": "Data is collected from public sources and validated automatically.",
+    "secondarySource": "Secondary (fallback & cross-check) source: Navasan — used when the primary source is unavailable; the source column always shows where each value came from.",
     "langOther": "فارسی",
     "skip": "Skip to content",
     "homeIntro": "An overview of global and Iranian markets at a glance."
@@ -121,6 +123,7 @@
     "frankfurter": { "fa": "ECB (Frankfurter)", "en": "ECB (Frankfurter)" },
     "stooq": { "fa": "Stooq", "en": "Stooq" },
     "tgju": { "fa": "TGJU", "en": "TGJU" },
+    "navasan": { "fa": "ناوسان", "en": "Navasan" },
     "manual": { "fa": "دستی", "en": "Manual" }
   },
   "pages": {
