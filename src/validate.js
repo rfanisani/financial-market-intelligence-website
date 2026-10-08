@@ -1,7 +1,7 @@
 // Data validation shared by the fetch pipeline, the build and the tests.
 
 export const KNOWN_SOURCES = new Set([
-  'seed', 'gold-api', 'frankfurter', 'stooq', 'tgju', 'manual',
+  'seed', 'gold-api', 'frankfurter', 'stooq', 'yahoo', 'tgju', 'manual',
 ]);
 
 /**
