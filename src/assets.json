@@ -1,0 +1,17 @@
+{
+  "XAU": { "cat": "global", "fa": "طلا (اونس)", "en": "Gold (oz)", "u_fa": "دلار/اونس", "u_en": "USD/oz", "d": 2 },
+  "XAG": { "cat": "global", "fa": "نقره (اونس)", "en": "Silver (oz)", "u_fa": "دلار/اونس", "u_en": "USD/oz", "d": 2 },
+  "BRENT": { "cat": "global", "fa": "نفت برنت", "en": "Brent Oil", "u_fa": "دلار/بشکه", "u_en": "USD/bbl", "d": 2 },
+  "WTI": { "cat": "global", "fa": "نفت WTI", "en": "WTI Oil", "u_fa": "دلار/بشکه", "u_en": "USD/bbl", "d": 2 },
+  "EURUSD": { "cat": "global", "fa": "یورو/دلار", "en": "EUR/USD", "u_fa": "", "u_en": "", "d": 4 },
+  "GBPUSD": { "cat": "global", "fa": "پوند/دلار", "en": "GBP/USD", "u_fa": "", "u_en": "", "d": 4 },
+  "USDJPY": { "cat": "global", "fa": "دلار/ین ژاپن", "en": "USD/JPY", "u_fa": "", "u_en": "", "d": 2 },
+  "USDIRR": { "cat": "iran", "fa": "دلار (بازار آزاد)", "en": "USD (free market)", "u_fa": "تومان", "u_en": "toman", "d": 0 },
+  "EURIRR": { "cat": "iran", "fa": "یورو (بازار آزاد)", "en": "EUR (free market)", "u_fa": "تومان", "u_en": "toman", "d": 0 },
+  "GBPIRR": { "cat": "iran", "fa": "پوند (بازار آزاد)", "en": "GBP (free market)", "u_fa": "تومان", "u_en": "toman", "d": 0 },
+  "AU18": { "cat": "iran", "fa": "طلای ۱۸ عیار", "en": "Gold 18K", "u_fa": "تومان/گرم", "u_en": "toman/g", "d": 0 },
+  "AU24": { "cat": "iran", "fa": "طلای ۲۴ عیار", "en": "Gold 24K", "u_fa": "تومان/گرم", "u_en": "toman/g", "d": 0 },
+  "COIN": { "cat": "iran", "fa": "سکه امامی", "en": "Emami Coin", "u_fa": "تومان", "u_en": "toman", "d": 0 },
+  "COINH": { "cat": "iran", "fa": "نیم‌سکه", "en": "Half Coin", "u_fa": "تومان", "u_en": "toman", "d": 0 },
+  "COINQ": { "cat": "iran", "fa": "ربع‌سکه", "en": "Quarter Coin", "u_fa": "تومان", "u_en": "toman", "d": 0 }
+}

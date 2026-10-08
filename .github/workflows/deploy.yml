@@ -1,0 +1,53 @@
+name: Build & Deploy
+
+on:
+  schedule:
+    - cron: '7 */4 * * *' # ~every 4 hours (GitHub may delay; real timestamp is stored in data)
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # No install step: the pipeline and site generator are zero-dependency Node.
+      - name: Fetch market data (keeps last known good data on failure)
+        run: node scripts/fetch-data.mjs
+      - name: Tests
+        run: node scripts/test.mjs
+      - name: Build site
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: node scripts/build.mjs
+      - name: Custom .IR domain (optional)
+        if: ${{ vars.IR_DOMAIN != '' }}
+        run: echo "${{ vars.IR_DOMAIN }}" > public/CNAME
+      - name: Size check (hard 1 MB budget)
+        run: node scripts/size-check.mjs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
