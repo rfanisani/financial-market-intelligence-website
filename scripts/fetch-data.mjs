@@ -58,18 +58,38 @@ async function providerStooq() {
   return out;
 }
 
+async function providerYahoo() {
+  // Stooq's CSV endpoint is gone; Yahoo Finance chart API covers Brent/WTI.
+  const out = {};
+  for (const [code, sym] of [['BRENT', 'BZ=F'], ['WTI', 'CL=F']]) {
+    const j = await getJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`);
+    const m = j.chart?.result?.[0]?.meta;
+    const v = m?.regularMarketPrice;
+    if (Number.isFinite(v) && v > 0) {
+      out[code] = { v, c: Number.isFinite(m.regularMarketChangePercent) ? m.regularMarketChangePercent : undefined };
+    }
+  }
+  return out;
+}
+
 async function providerTgju() {
-  // Iranian free-market rates (tgju.org public summary endpoint, rial values).
+  // Iranian free-market rates (tgju.org summary-table-data endpoint, rial values).
+  // Row format: [close, open, high, low, changeHTML, percentHTML, date, jalaliDate]
   const symbols = {
     USDIRR: 'price_dollar_rl', EURIRR: 'price_eur', GBPIRR: 'price_gbp',
-    AU18: 'geram18', AU24: 'geram24', COIN: 'sekee', COINH: 'seke-nim', COINQ: 'seke-rob',
+    AU18: 'geram18', AU24: 'geram24', COIN: 'sekee', COINH: 'nim', COINQ: 'rob',
   };
   const out = {};
   for (const [code, sym] of Object.entries(symbols)) {
     try {
-      const j = await getJson(`https://api.tgju.org/v1/market/indicator/summary/${sym}`);
-      const rial = Number(String(j.data?.p ?? '').replace(/,/g, ''));
-      if (Number.isFinite(rial) && rial > 0) out[code] = rial / 10; // rial -> toman
+      const j = await getJson(`https://api.tgju.org/v1/market/indicator/summary-table-data/${sym}?row=1`);
+      const row = j.data?.[0];
+      if (!Array.isArray(row)) continue;
+      const rial = Number(String(row[0]).replace(/,/g, ''));
+      const pct = Number(String(row[5] ?? '').replace(/<[^>]*>/g, '').replace('%', ''));
+      if (Number.isFinite(rial) && rial > 0) {
+        out[code] = { v: rial / 10, c: Number.isFinite(pct) ? pct : undefined }; // rial -> toman
+      }
     } catch { /* single asset failure keeps last good value */ }
   }
   return out;
@@ -81,16 +101,19 @@ const prev = JSON.parse(readFileSync(CURRENT, 'utf8'));
 const providers = [
   ['gold-api', providerGoldApi],
   ['frankfurter', providerFrankfurter],
-  ['stooq', providerStooq],
+  ['yahoo', providerYahoo],
   ['tgju', providerTgju],
 ];
 
-const updates = {}; // code -> {v, s}
+const updates = {}; // code -> {v, s, c?}
 let failures = 0;
 for (const [name, fn] of providers) {
   try {
     const values = await fn();
-    for (const [code, v] of Object.entries(values)) updates[code] = { v, s: name };
+    for (const [code, u0] of Object.entries(values)) {
+      const u = typeof u0 === 'object' && u0 !== null ? u0 : { v: u0 };
+      updates[code] = { v: u.v, s: name, c: u.c };
+    }
     console.log(`[fetch] ${name}: ${Object.keys(values).length} assets`);
   } catch (e) {
     failures++;
@@ -109,8 +132,16 @@ for (const code of Object.keys(prev.a)) {
   const u = updates[code];
   const old = prev.a[code];
   const v = u ? u.v : old.v;
-  // Change % vs previous stored value when we have a fresh quote.
-  const c = u && Number.isFinite(old.v) && old.v > 0 ? ((v - old.v) / old.v) * 100 : old.c;
+  // Change % vs previous stored value when we have a fresh quote. If the
+  // previous value was seed placeholder data, prefer the provider's own
+  // daily change instead of a meaningless vs-seed delta.
+  const seeded = prev.s[code] === 'seed';
+  let c;
+  if (u) {
+    if (seeded && Number.isFinite(u.c)) c = u.c;
+    else if (Number.isFinite(old.v) && old.v > 0) c = ((v - old.v) / old.v) * 100;
+    else c = old.c;
+  } else c = old.c;
   next.a[code] = { v: round(code, v), c: +c.toFixed(2) };
   next.s[code] = u ? u.s : prev.s[code];
 }
