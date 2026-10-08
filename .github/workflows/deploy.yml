@@ -34,8 +34,12 @@ jobs:
           SITE_URL: ${{ vars.SITE_URL }}
         run: node scripts/build.mjs
       - name: Custom .IR domain (optional)
-        if: ${{ vars.IR_DOMAIN != '' }}
-        run: echo "${{ vars.IR_DOMAIN }}" > public/CNAME
+        run: |
+          if [ -n "${{ vars.IR_DOMAIN }}" ]; then
+            echo "${{ vars.IR_DOMAIN }}" > public/CNAME
+          elif [ -f CNAME ]; then
+            cp CNAME public/CNAME
+          fi
       - name: Size check (hard 1 MB budget)
         run: node scripts/size-check.mjs
       - uses: actions/upload-pages-artifact@v3
