@@ -11,6 +11,7 @@ import {
   impliedUsd, difference, expectedDomesticPrice,
 } from '../src/calc.js';
 import { validateCurrent, validateHistory } from '../src/validate.js';
+import { providerNavasan } from './fetch-data.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -88,4 +89,62 @@ test('history files are valid', () => {
     const res = validateHistory(h);
     assert.deepEqual(res.errors, [], f);
   }
+});
+
+// --- Navasan secondary source -------------------------------------------------
+// Fixture replicates the live https://www.navasan.tech/wp-navasan.php wire format:
+// JSONP wrapping a doubly-escaped HTML table. The inner JSON uses PHP json_encode
+// escapes (forward slashes -> \/, non-ASCII -> \uXXXX) and is embedded in a
+// single-quoted JS string. Values use Persian digits with ASCII thousand commas.
+function navasanWireFixture() {
+  const rowHtml = [
+    ['usd', 'دلار آمریکا', '۲۶۶,۷۹۰', '۰'],
+    ['eur', 'یورو', '۲۹۸,۵۸۰', '۰'],
+    ['gbp', 'پوند انگلیس', '۳۵۲,۳۸۰', '۰'],
+    ['usd_xau', 'اونس طلا به دلار', '۴,۱۳۴', '-۲'],
+    ['18ayar', 'یک گرم طلا ۱۸ عیار', '۲۶,۳۰۵,۴۶۰', '۰'],
+    ['sekkeh', 'سکه طرح امامی', '۲۷۰,۰۰۰,۰۰۰', '۰'],
+    ['nim', 'سکه نیم', '۱۴۳,۰۰۰,۰۰۰', '۰'],
+    ['rob', 'سکه ربع', '۷۶,۵۰۰,۰۰۰', '۰'],
+  ].map(([id, nam, val, chg]) =>
+    `<tr id="${id}">\r\n<td class="nam">${nam}</td>\t\r\n<td class="val">${val}</td>\r\n<td class="chg zer">${chg}</td>\r\n<td class="dat">۲۰:۵۹</td>\r\n</tr>`
+  ).join('\r\n');
+  const html = `<table id="navasan_table" dir="rtl">\r\n<tbody>\r\n${rowHtml}\r\n` +
+    `<tr style="background-color: transparent"><td colspan="4"><a href="https://www.navasan.net" target="_blank">نرخ ارز</a></td></tr>\r\n` +
+    `<tr><td colspan="4"></td></tr>\r\n</tbody>\r\n</table>`;
+  const jsonText = JSON.stringify(html)
+    .replace(/\//g, '\\/')
+    .replace(/[^\x00-\x7F]/g, (ch) => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
+  return `navasanret('${jsonText.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}');`;
+}
+
+async function withMockFetch(response, fn) {
+  const orig = globalThis.fetch;
+  globalThis.fetch = typeof response === 'number'
+    ? async () => ({ ok: false, status: response })
+    : async () => ({ ok: true, text: async () => response });
+  try { return await fn(); } finally { globalThis.fetch = orig; }
+}
+
+test('navasan provider parses the live JSONP/HTML wire format', async () => {
+  const out = await withMockFetch(navasanWireFixture(), providerNavasan);
+  assert.equal(out.USDIRR.v, 266790); // Persian digits + ASCII thousand separators
+  assert.equal(out.EURIRR.v, 298580);
+  assert.equal(out.GBPIRR.v, 352380);
+  assert.equal(out.XAU.v, 4134);
+  assert.ok(Math.abs(out.XAU.c - (-2 / 4134) * 100) < 1e-9); // absolute change -> percent
+  assert.equal(out.AU18.v, 26305460);
+  assert.equal(out.COIN.v, 270000000);
+  assert.equal(out.COINH.v, 143000000);
+  assert.equal(out.COINQ.v, 76500000);
+  assert.equal(out.USDIRR.c, 0);
+  assert.equal(out.AU24, undefined); // not offered by navasan
+  assert.equal(Object.keys(out).length, 8); // attribution/empty rows are skipped
+});
+
+test('navasan provider throws on http error or malformed body', async () => {
+  // The pipeline catches these and keeps the last known good values.
+  await assert.rejects(withMockFetch(503, providerNavasan), /503/);
+  await assert.rejects(withMockFetch('<html>error</html>', providerNavasan));
+  await assert.rejects(withMockFetch('navasanret();', providerNavasan));
 });
