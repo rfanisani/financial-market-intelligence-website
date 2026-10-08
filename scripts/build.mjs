@@ -160,7 +160,7 @@ function homeBody(lang) {
   ${card(t.goldSection, table(G.gold, lang))}
   ${card(t.impliedDollar, impliedSection(lang))}
   ${card(t.chart7d, chart + legend(lang, [['#d97706', 'legendImplied'], ['#3b82f6', 'legendActual']]))}
-  ${card(t.dataSources, `<p>${sources}</p><p class="muted">${t.lastUpdate}: <span class="num">${fmtTime(data.t, lang)}</span></p>`)}`;
+  ${card(t.dataSources, `<p>${sources}</p><p class="muted">${t.secondarySource}</p><p class="muted">${t.lastUpdate}: <span class="num">${fmtTime(data.t, lang)}</span></p>`)}`;
 }
 
 function categoryBody(lang, slug, codes, chartAsset, chartColor) {
