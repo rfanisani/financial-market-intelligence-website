@@ -196,15 +196,20 @@ test('navigation stays inside the language scope', () => {
 });
 
 test('every page has the footer refresh button wired to refresh.js', () => {
-  const data = JSON.parse(readFileSync(path.join(root, 'data/current.json'), 'utf8'));
   assert.ok(existsSync(path.join(PUB, 'js/refresh.js')), 'public/js/refresh.js is built');
+  // Compare against the published snapshot (public/data/current.json), NOT the
+  // live data/current.json: in CI the pipeline runs fetch -> test -> build, so
+  // the live file is already newer than the committed build at test time.
+  const pubData = JSON.parse(readFileSync(path.join(PUB, 'data/current.json'), 'utf8'));
   for (const page of listHtml(PUB)) {
     const rel = path.relative(PUB, page);
     if (rel === 'index.html' || rel === '404.html') continue; // bare redirect pages
     const html = readFileSync(page, 'utf8');
     assert.ok(html.includes('id="refresh-btn"'), `${rel}: refresh button`);
-    assert.ok(html.includes(`data-t="${data.t}"`), `${rel}: data-t timestamp`);
     assert.ok(html.includes('js/refresh.js'), `${rel}: refresh.js script`);
     assert.ok(html.includes('id="i18n-refresh"'), `${rel}: refresh i18n`);
+    const m = html.match(/<body[^>]* data-t="(\d+)"/);
+    assert.ok(m, `${rel}: data-t timestamp on <body>`);
+    assert.equal(m[1], String(pubData.t), `${rel}: data-t matches the published data snapshot`);
   }
 });
