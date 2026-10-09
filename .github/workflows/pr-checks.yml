@@ -1,0 +1,35 @@
+name: PR Checks
+
+# Mirrors the production pipeline in .github/workflows/deploy.yml (minus the
+# network fetch and the Pages deploy) so every pull request is verified with
+# the exact same zero-dependency commands the site ships with.
+# The deploy workflow itself is unchanged and still only runs on main.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # No install step: the pipeline and site generator are zero-dependency Node.
+      - name: Build site (regenerate public/ from committed data)
+        run: node scripts/build.mjs
+      - name: Build output must be committed and current
+        run: git diff --exit-code -- public
+      - name: Tests
+        run: node scripts/test.mjs
+      - name: Size check (hard 1 MB budget)
+        run: node scripts/size-check.mjs

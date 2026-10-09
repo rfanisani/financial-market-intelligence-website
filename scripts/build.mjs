@@ -15,6 +15,7 @@ if (!SITE_URL) console.warn('[build] SITE_URL not set - canonical/OG/sitemap wil
 
 const data = JSON.parse(readFileSync(path.join(root, 'data/current.json'), 'utf8'));
 const h7 = JSON.parse(readFileSync(path.join(root, 'data/history-7d.json'), 'utf8'));
+const h30 = JSON.parse(readFileSync(path.join(root, 'data/history-30d.json'), 'utf8'));
 const assets = JSON.parse(readFileSync(path.join(root, 'src/assets.json'), 'utf8'));
 const i18n = JSON.parse(readFileSync(path.join(root, 'src/i18n.json'), 'utf8'));
 
@@ -101,7 +102,7 @@ function impliedSection(lang) {
 }
 
 // --- page shell -------------------------------------------------------------
-const NAV = [['', 'home'], ['gold/', 'gold'], ['currency/', 'currency'], ['oil/', 'oil'], ['iran-gold/', 'iranGold'], ['calculator/', 'calculator'], ['about/', 'about']];
+const NAV = [['', 'home'], ['gold/', 'gold'], ['currency/', 'currency'], ['oil/', 'oil'], ['iran-gold/', 'iranGold'], ['lab/', 'lab'], ['calculator/', 'calculator'], ['about/', 'about']];
 
 function shell({ lang, slug, body, extraHead = '' }) {
   const t = i18n[lang];
@@ -208,6 +209,57 @@ function calculatorBody(lang) {
   </form></section>`, extraHead };
 }
 
+// --- Financial Intelligence Lab ----------------------------------------------
+// Interactive analysis over the published daily history snapshots. The heavy
+// lifting happens in the browser (public/js/lab.js + lab-calc.js); the build
+// only renders the controls and embeds the data + localized strings as JSON.
+const LAB_ASSETS = ['XAU', 'XAG', 'BRENT', 'WTI', 'USDIRR', 'AU18'];
+
+function labBody(lang) {
+  const L = i18n[lang].lab;
+  const labAssets = LAB_ASSETS
+    .filter((code) => Array.isArray(h7.a[code]) && Array.isArray(h30.a[code]) && assets[code])
+    .map((code) => ({
+      code,
+      name: name(code, lang),
+      unit: unit(code, lang),
+      d: assets[code].d,
+      src: srcName(code, lang),
+      s7: h7.a[code],
+      s30: h30.a[code],
+    }));
+  const labData = JSON.stringify({
+    lang,
+    assets: labAssets,
+    w7: { t0: h7.t0, dt: h7.dt },
+    w30: { t0: h30.t0, dt: h30.dt },
+  });
+  const opts = labAssets.map((a) => `<option value="${a.code}">${esc(a.name)}</option>`).join('');
+  const tools = [['return', L.tReturn], ['risk', L.tRisk], ['trend', L.tTrend], ['compare', L.tCompare]]
+    .map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+  const extraHead =
+    `<script type="application/json" id="i18n-lab">${JSON.stringify(L)}</script>` +
+    `<script type="application/json" id="lab-data">${labData}</script>` +
+    `<script type="module" src="../../js/lab.js"></script>`;
+  const body = `<h1>${esc(L.title)}</h1><p class="muted">${esc(L.intro)}</p>${statusLine(lang)}
+  <section class="card"><form id="lab-form">
+    <div class="fgrid">
+      <div><label for="lab-tool">${esc(L.tool)}</label><select id="lab-tool">${tools}</select></div>
+      <div><label for="lab-window">${esc(L.window)}</label><select id="lab-window"><option value="7">${esc(L.window7)}</option><option value="30">${esc(L.window30)}</option></select></div>
+      <div id="lab-f-asset"><label for="lab-asset">${esc(L.asset)}</label><select id="lab-asset">${opts}</select></div>
+      <div id="lab-f-asset-a" hidden><label for="lab-asset-a">${esc(L.assetA)}</label><select id="lab-asset-a">${opts}</select></div>
+      <div id="lab-f-asset-b" hidden><label for="lab-asset-b">${esc(L.assetB)}</label><select id="lab-asset-b">${opts}</select></div>
+      <div id="lab-f-ma" hidden><label for="lab-ma">${esc(L.maWindow)}</label><input id="lab-ma" type="number" min="2" max="30" step="1" value="7"></div>
+    </div>
+    <button class="btn" type="submit" id="lab-run">${esc(L.run)}</button>
+    <div id="lab-result" aria-live="polite"><p class="muted">${esc(L.empty)}</p></div>
+    <noscript><p class="error">${esc(L.noJs)}</p></noscript>
+  </form></section>
+  ${card(L.method, `<p><code>${esc(L.mReturn)}</code></p><p><code>${esc(L.mVol)}</code></p><p><code>${esc(L.mDd)}</code></p><p><code>${esc(L.mSma)}</code></p><p><code>${esc(L.mCorr)}</code></p>`)}
+  ${card(L.dataCard, `<p>${esc(L.dataNote)}</p><p class="muted">${esc(L.shortWindow)}</p><p class="muted"><strong>${esc(i18n[lang].disclaimer)}</strong> ${esc(L.notAdvice)}</p>`)}`;
+  return { body, extraHead };
+}
+
 function aboutBody(lang) {
   const a = i18n[lang].about;
   return `<h1>${esc(a.h)}</h1><section class="card"><p>${a.p1}</p><p>${a.p2}</p><p>${a.p3}</p><p><strong>${esc(i18n[lang].disclaimer)}</strong> ${a.p4.replace(/^[^:]*: /, '')}</p></section>`;
@@ -216,17 +268,19 @@ function aboutBody(lang) {
 // --- write everything -------------------------------------------------------
 mkdirSync(PUB, { recursive: true });
 for (const lang of ['fa', 'en']) {
-  for (const slug of ['', 'gold/', 'currency/', 'oil/', 'iran-gold/', 'calculator/', 'about/']) {
+  for (const slug of ['', 'gold/', 'currency/', 'oil/', 'iran-gold/', 'lab/', 'calculator/', 'about/']) {
     const dir = path.join(PUB, lang, slug);
     mkdirSync(dir, { recursive: true });
-    const calc = slug === 'calculator/' ? calculatorBody(lang) : null;
-    const body = calc ? calc.body
+    const page = slug === 'calculator/' ? calculatorBody(lang)
+      : slug === 'lab/' ? labBody(lang)
+      : null;
+    const body = page ? page.body
       : slug === '' ? homeBody(lang)
       : slug === 'about/' ? aboutBody(lang)
       : categoryBody(lang, slug.slice(0, -1), { gold: G.gold, currency: [...G.fxGlobal, ...G.fxIran], oil: G.oil, 'iran-gold': G.iranGold }[slug.slice(0, -1)],
           { gold: 'XAU', currency: 'USDIRR', oil: 'BRENT', 'iran-gold': 'AU18' }[slug.slice(0, -1)],
           { gold: '#d97706', currency: '#16a34a', oil: '#3b82f6', 'iran-gold': '#d97706' }[slug.slice(0, -1)]);
-    writeFileSync(path.join(dir, 'index.html'), shell({ lang, slug: slug.slice(0, -1), body, extraHead: calc?.extraHead }));
+    writeFileSync(path.join(dir, 'index.html'), shell({ lang, slug: slug.slice(0, -1), body, extraHead: page?.extraHead }));
   }
 }
 
@@ -247,6 +301,8 @@ copyFileSync(path.join(root, 'src/style.css'), path.join(PUB, 'css/style.css'));
 copyFileSync(path.join(root, 'src/calc.js'), path.join(PUB, 'js/calc.js'));
 copyFileSync(path.join(root, 'src/app.js'), path.join(PUB, 'js/app.js'));
 copyFileSync(path.join(root, 'src/refresh.js'), path.join(PUB, 'js/refresh.js'));
+copyFileSync(path.join(root, 'src/lab.js'), path.join(PUB, 'js/lab.js'));
+copyFileSync(path.join(root, 'src/lab-calc.js'), path.join(PUB, 'js/lab-calc.js'));
 copyFileSync(path.join(root, 'src/favicon.svg'), path.join(PUB, 'favicon.svg'));
 for (const f of ['current.json', 'history-7d.json', 'history-30d.json']) {
   copyFileSync(path.join(root, 'data', f), path.join(PUB, 'data', f));
@@ -255,7 +311,7 @@ for (const f of ['current.json', 'history-7d.json', 'history-30d.json']) {
 writeFileSync(path.join(PUB, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${SITE_URL || ''}/sitemap.xml\n`);
 writeFileSync(path.join(PUB, 'sitemap.xml'),
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` +
-  ['fa', 'en'].flatMap((lang) => ['', 'gold/', 'currency/', 'oil/', 'iran-gold/', 'calculator/', 'about/']
+  ['fa', 'en'].flatMap((lang) => ['', 'gold/', 'currency/', 'oil/', 'iran-gold/', 'lab/', 'calculator/', 'about/']
     .map((s) => `<url><loc>${SITE_URL}/${lang}/${s}</loc><lastmod>${new Date(data.t * 1000).toISOString()}</lastmod></url>`)).join('') +
   `</urlset>\n`);
 
