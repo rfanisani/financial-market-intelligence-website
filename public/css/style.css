@@ -116,3 +116,13 @@ body { padding-bottom: 38px; }
 .refresh .btn { margin-top: 0; padding: 6px 14px; font-size: .85rem; }
 .refresh .btn:disabled { opacity: .6; cursor: wait; }
 #refresh-msg { color: var(--muted); }
+
+/* Financial Intelligence Lab */
+dl.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 10px 0; font-size: .95rem; }
+dl.kv dt { color: var(--muted); }
+dl.kv dd { margin: 0; font-weight: 600; }
+@media (min-width: 560px) { dl.kv { grid-template-columns: 1fr 1fr; } }
+#lab-result:empty { display: none; }
+#lab-result .result p:first-child { margin-top: 0; }
+#lab-result .chart { margin-top: 8px; }
+#lab-result .kv { margin-bottom: 4px; }
