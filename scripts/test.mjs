@@ -2,7 +2,7 @@
 // Run: node scripts/test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -147,4 +147,64 @@ test('navasan provider throws on http error or malformed body', async () => {
   await assert.rejects(withMockFetch(503, providerNavasan), /503/);
   await assert.rejects(withMockFetch('<html>error</html>', providerNavasan));
   await assert.rejects(withMockFetch('navasanret();', providerNavasan));
+});
+
+// --- Generated site: links & footer refresh button ----------------------------
+const PUB = path.join(root, 'public');
+
+function listHtml(dir) {
+  return readdirSync(dir).flatMap((f) => {
+    const p = path.join(dir, f);
+    return statSync(p).isDirectory() ? listHtml(p) : (f.endsWith('.html') ? [p] : []);
+  });
+}
+
+test('all internal links and scripts in generated pages resolve to real files', () => {
+  const pages = listHtml(PUB);
+  assert.ok(pages.length >= 14, `expected the built site, found ${pages.length} pages`);
+  for (const page of pages) {
+    const html = readFileSync(page, 'utf8');
+    const dir = path.dirname(page);
+    for (const m of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
+      const ref0 = m[1];
+      if (/^(https?:)?\/\//.test(ref0) || ref0.startsWith('#') || ref0.startsWith('mailto:')) continue;
+      const ref = ref0.split('#')[0].split('?')[0];
+      if (!ref) continue;
+      const target = ref.startsWith('/') ? path.join(PUB, ref) : path.resolve(dir, ref);
+      const file = statSync(target, { throwIfNoEntry: false })?.isDirectory()
+        ? path.join(target, 'index.html')
+        : target;
+      assert.ok(existsSync(file), `${path.relative(PUB, page)} -> ${ref0} (resolved ${path.relative(PUB, file)})`);
+    }
+  }
+});
+
+test('navigation stays inside the language scope', () => {
+  const faHome = readFileSync(path.join(PUB, 'fa/index.html'), 'utf8');
+  assert.ok(faHome.includes('href="./"'), 'fa home: home tab');
+  assert.ok(faHome.includes('href="gold/"'), 'fa home: gold tab');
+  assert.ok(!faHome.includes('href="../gold/"'), 'fa home: no root-escaping tab links');
+  assert.ok(faHome.includes('href="about/"'), 'fa home: footer about link');
+  const faGold = readFileSync(path.join(PUB, 'fa/gold/index.html'), 'utf8');
+  assert.ok(faGold.includes('href="../"'), 'fa gold: home tab');
+  assert.ok(faGold.includes('href="../currency/"'), 'fa gold: currency tab');
+  assert.ok(faGold.includes('href="../about/"'), 'fa gold: footer about link');
+  assert.ok(!faGold.includes('href="../../gold/"'), 'fa gold: no root-escaping tab links');
+  const enOil = readFileSync(path.join(PUB, 'en/oil/index.html'), 'utf8');
+  assert.ok(enOil.includes('href="../iran-gold/"'), 'en oil: iran-gold tab');
+  assert.ok(enOil.includes('href="../../fa/oil/"'), 'en oil: language switch');
+});
+
+test('every page has the footer refresh button wired to refresh.js', () => {
+  const data = JSON.parse(readFileSync(path.join(root, 'data/current.json'), 'utf8'));
+  assert.ok(existsSync(path.join(PUB, 'js/refresh.js')), 'public/js/refresh.js is built');
+  for (const page of listHtml(PUB)) {
+    const rel = path.relative(PUB, page);
+    if (rel === 'index.html' || rel === '404.html') continue; // bare redirect pages
+    const html = readFileSync(page, 'utf8');
+    assert.ok(html.includes('id="refresh-btn"'), `${rel}: refresh button`);
+    assert.ok(html.includes(`data-t="${data.t}"`), `${rel}: data-t timestamp`);
+    assert.ok(html.includes('js/refresh.js'), `${rel}: refresh.js script`);
+    assert.ok(html.includes('id="i18n-refresh"'), `${rel}: refresh i18n`);
+  }
 });
