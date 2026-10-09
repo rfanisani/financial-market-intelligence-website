@@ -5,7 +5,8 @@
 //
 // Run: node scripts/fetch-data.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import vm from 'node:vm';
 import path from 'node:path';
 import { validateCurrent } from '../src/validate.js';
 
@@ -72,6 +73,41 @@ async function providerYahoo() {
   return out;
 }
 
+export async function providerNavasan() {
+  // Secondary Iranian source (navasan.tech widget). The endpoint returns a
+  // JSONP payload wrapping a doubly-escaped HTML table; evaluate it in a bare
+  // vm sandbox so the JS string escapes are unwound exactly as a browser would.
+  const url = 'https://www.navasan.tech/wp-navasan.php?usd&eur&gbp&usd_xau&18ayar&sekkeh&nim&rob';
+  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT), headers: { 'user-agent': 'market-site/1.0' } });
+  if (!res.ok) throw new Error(`${res.status} navasan`);
+  const jsonp = await res.text();
+  let payload;
+  vm.runInNewContext(jsonp, { navasanret: (x) => { payload = x; } }, { timeout: 1000 });
+  let html = JSON.parse(payload);
+  if (html.startsWith('"')) html = JSON.parse(html);
+  // Persian/Arabic-Indic digits -> ASCII, strip separators.
+  const num = (v) => Number(String(v)
+    .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+    .replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+    .replace(/,/g, ''));
+  const map = {
+    usd: 'USDIRR', eur: 'EURIRR', gbp: 'GBPIRR',
+    usd_xau: 'XAU', '18ayar': 'AU18', sekkeh: 'COIN', nim: 'COINH', rob: 'COINQ',
+  };
+  const out = {};
+  for (const [, id, row] of html.matchAll(/<tr id="([^"]+)">([\s\S]*?)<\/tr>/g)) {
+    const code = map[id];
+    if (!code) continue;
+    const tds = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((t) => t[1].replace(/<[^>]*>/g, '').trim());
+    const v = num(tds[1] ?? '');
+    const chg = num(tds[2] ?? '');
+    if (!Number.isFinite(v) || v <= 0) continue;
+    // Navasan reports an absolute change; convert to percent for storage.
+    out[code] = { v, c: Number.isFinite(chg) && v > 0 ? (chg / v) * 100 : undefined };
+  }
+  return out;
+}
+
 async function providerTgju() {
   // Iranian free-market rates (tgju.org summary-table-data endpoint, rial values).
   // Row format: [close, open, high, low, changeHTML, percentHTML, date, jalaliDate]
@@ -97,64 +133,88 @@ async function providerTgju() {
 
 // --- Merge + validate -------------------------------------------------------
 
-const prev = JSON.parse(readFileSync(CURRENT, 'utf8'));
-const providers = [
-  ['gold-api', providerGoldApi],
-  ['frankfurter', providerFrankfurter],
-  ['yahoo', providerYahoo],
-  ['tgju', providerTgju],
-];
+// The pipeline runs only when this file is executed directly
+// (node scripts/fetch-data.mjs); the test suite imports the providers
+// above without triggering any network or file writes.
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
-const updates = {}; // code -> {v, s, c?}
-let failures = 0;
-for (const [name, fn] of providers) {
-  try {
-    const values = await fn();
-    for (const [code, u0] of Object.entries(values)) {
-      const u = typeof u0 === 'object' && u0 !== null ? u0 : { v: u0 };
-      updates[code] = { v: u.v, s: name, c: u.c };
+if (isMain) {
+  const prev = JSON.parse(readFileSync(CURRENT, 'utf8'));
+  // Later providers override earlier ones, so the dedicated sources win and
+  // Navasan (secondary) only survives where no primary source covers a code.
+  const providers = [
+    ['navasan', providerNavasan],
+    ['gold-api', providerGoldApi],
+    ['frankfurter', providerFrankfurter],
+    ['yahoo', providerYahoo],
+    ['tgju', providerTgju],
+  ];
+
+  const updates = {}; // code -> {v, s, c?}
+  const perProvider = {}; // name -> {code: v} for cross-checking
+  let failures = 0;
+  for (const [name, fn] of providers) {
+    try {
+      const values = await fn();
+      perProvider[name] = {};
+      for (const [code, u0] of Object.entries(values)) {
+        const u = typeof u0 === 'object' && u0 !== null ? u0 : { v: u0 };
+        updates[code] = { v: u.v, s: name, c: u.c };
+        perProvider[name][code] = u.v;
+      }
+      console.log(`[fetch] ${name}: ${Object.keys(values).length} assets`);
+    } catch (e) {
+      failures++;
+      console.warn(`[fetch] ${name} failed: ${e.message} (keeping last known good values)`);
     }
-    console.log(`[fetch] ${name}: ${Object.keys(values).length} assets`);
-  } catch (e) {
-    failures++;
-    console.warn(`[fetch] ${name} failed: ${e.message} (keeping last known good values)`);
   }
-}
 
-if (Object.keys(updates).length === 0) {
-  console.warn('[fetch] all providers failed - keeping previous data untouched');
-  process.exit(0);
-}
+  // Cross-check: warn when the primary (TGJU) and secondary (Navasan) disagree
+  // widely on an Iranian asset — usually one of them is stale.
+  for (const code of Object.keys(perProvider.tgju ?? {})) {
+    const a = perProvider.tgju[code];
+    const b = perProvider.navasan?.[code];
+    if (Number.isFinite(a) && Number.isFinite(b) && b > 0) {
+      const gap = Math.abs(a - b) / b * 100;
+      if (gap > 5) console.warn(`[fetch] cross-check ${code}: tgju=${a} vs navasan=${b} (${gap.toFixed(1)}% apart)`);
+    }
+  }
 
-const now = Math.floor(Date.now() / 1000);
-const next = { t: now, s: { ...prev.s }, a: {} };
-for (const code of Object.keys(prev.a)) {
-  const u = updates[code];
-  const old = prev.a[code];
-  const v = u ? u.v : old.v;
-  // Change % vs previous stored value when we have a fresh quote. If the
-  // previous value was seed placeholder data, prefer the provider's own
-  // daily change instead of a meaningless vs-seed delta.
-  const seeded = prev.s[code] === 'seed';
-  let c;
-  if (u) {
-    if (seeded && Number.isFinite(u.c)) c = u.c;
-    else if (Number.isFinite(old.v) && old.v > 0) c = ((v - old.v) / old.v) * 100;
-    else c = old.c;
-  } else c = old.c;
-  next.a[code] = { v: round(code, v), c: +c.toFixed(2) };
-  next.s[code] = u ? u.s : prev.s[code];
-}
+  if (Object.keys(updates).length === 0) {
+    console.warn('[fetch] all providers failed - keeping previous data untouched');
+    process.exit(0);
+  }
 
-const check = validateCurrent(next);
-if (!check.ok) {
-  console.error('[fetch] validation failed, NOT writing:', check.errors.join('; '));
-  process.exit(1);
-}
+  const now = Math.floor(Date.now() / 1000);
+  const next = { t: now, s: { ...prev.s }, a: {} };
+  for (const code of Object.keys(prev.a)) {
+    const u = updates[code];
+    const old = prev.a[code];
+    const v = u ? u.v : old.v;
+    // Change % vs previous stored value when we have a fresh quote. If the
+    // previous value was seed placeholder data, prefer the provider's own
+    // daily change instead of a meaningless vs-seed delta.
+    const seeded = prev.s[code] === 'seed';
+    let c;
+    if (u) {
+      if (seeded && Number.isFinite(u.c)) c = u.c;
+      else if (Number.isFinite(old.v) && old.v > 0) c = ((v - old.v) / old.v) * 100;
+      else c = old.c;
+    } else c = old.c;
+    next.a[code] = { v: round(code, v), c: +c.toFixed(2) };
+    next.s[code] = u ? u.s : prev.s[code];
+  }
 
-writeFileSync(CURRENT, JSON.stringify(next));
-console.log(`[fetch] wrote ${Object.keys(updates).length} updated / ${Object.keys(next.a).length} total assets at ${now}`);
-if (failures > 0) console.warn(`[fetch] ${failures} provider(s) failed; mixed sources recorded per asset`);
+  const check = validateCurrent(next);
+  if (!check.ok) {
+    console.error('[fetch] validation failed, NOT writing:', check.errors.join('; '));
+    process.exit(1);
+  }
+
+  writeFileSync(CURRENT, JSON.stringify(next));
+  console.log(`[fetch] wrote ${Object.keys(updates).length} updated / ${Object.keys(next.a).length} total assets at ${now}`);
+  if (failures > 0) console.warn(`[fetch] ${failures} provider(s) failed; mixed sources recorded per asset`);
+}
 
 function round(code, v) {
   const d = code === 'EURUSD' || code === 'GBPUSD' ? 4 : v >= 1000 ? 0 : 2;
