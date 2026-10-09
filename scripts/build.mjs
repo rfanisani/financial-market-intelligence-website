@@ -106,12 +106,16 @@ const NAV = [['', 'home'], ['gold/', 'gold'], ['currency/', 'currency'], ['oil/'
 function shell({ lang, slug, body, extraHead = '' }) {
   const t = i18n[lang];
   const meta = i18n.pages[slug || 'home'][lang];
-  const prefix = slug ? '../../' : '../';
+  const prefix = slug ? '../../' : '../'; // root-level assets (css/js/favicon/data)
+  // In-language links must stay inside /<lang>/ : from /fa/ the tabs are
+  // "gold/", from /fa/gold/ they are "../gold/". Using the asset prefix here
+  // broke navigation (links resolved to /gold/ -> 404 -> back to home).
+  const navLink = (href) => (href === '' ? (slug ? '../' : './') : `${slug ? '../' : ''}${href}`);
   const url = `${SITE_URL}/${lang}/${slug ? slug + '/' : ''}`;
   const other = lang === 'fa' ? 'en' : 'fa';
   const switchHref = slug ? `../../${other}/${slug}/` : `../${other}/`;
   const nav = NAV.map(([href, key]) =>
-    `<a href="${prefix}${href}"${key === (slug || 'home') ? ' aria-current="page"' : ''}>${t.nav[key]}</a>`).join('');
+    `<a href="${navLink(href)}"${key === (slug || 'home') ? ' aria-current="page"' : ''}>${t.nav[key]}</a>`).join('');
   const jsonLd = slug
     ? { '@context': 'https://schema.org', '@type': 'WebPage', name: meta.t, description: meta.d, url,
         isPartOf: { '@type': 'WebSite', name: t.siteName, url: `${SITE_URL}/` } }
@@ -126,14 +130,17 @@ function shell({ lang, slug, body, extraHead = '' }) {
 <link rel="icon" href="${prefix}favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="${prefix}css/style.css">
 <script type="application/ld+json">${JSON.stringify(jsonLd)}</script>${extraHead}</head>
-<body data-usd="${data.a.USDIRR.v}"><a class="skip" href="#main">${t.skip}</a>
+<body data-usd="${data.a.USDIRR.v}" data-t="${data.t}"><a class="skip" href="#main">${t.skip}</a>
 <header><div class="wrap hbar"><a class="brand" href="${prefix}">${esc(t.siteName)}<b>.</b></a>
 <nav class="main" aria-label="main">${nav}</nav><a class="lang" href="${switchHref}" hreflang="${other}" rel="alternate">${t.langOther}</a></div></header>
 <main id="main" class="wrap">${body}</main>
 <footer><div class="wrap">
 <p>${t.lastUpdate}: <span class="num">${fmtTime(data.t, lang)}</span> · ${t.sourcesNote}</p>
 <p>${esc(t.disclaimer)}</p>
-<nav aria-label="footer"><a href="${prefix}about/">${t.nav.about}</a><a href="${prefix}calculator/">${t.nav.calculator}</a></nav>
+<div class="refresh"><button type="button" class="btn" id="refresh-btn">${esc(t.refresh)}</button><span id="refresh-msg" role="status" aria-live="polite"></span></div>
+<nav aria-label="footer"><a href="${navLink('about/')}">${t.nav.about}</a><a href="${navLink('calculator/')}">${t.nav.calculator}</a></nav>
+<script type="application/json" id="i18n-refresh">${JSON.stringify({ refreshing: t.refreshing, upToDate: t.refreshUpToDate, failed: t.refreshFailed })}</script>
+<script src="${prefix}js/refresh.js" defer></script>
 </div></footer></body></html>`;
 }
 
@@ -231,6 +238,7 @@ mkdirSync(path.join(PUB, 'data'), { recursive: true });
 copyFileSync(path.join(root, 'src/style.css'), path.join(PUB, 'css/style.css'));
 copyFileSync(path.join(root, 'src/calc.js'), path.join(PUB, 'js/calc.js'));
 copyFileSync(path.join(root, 'src/app.js'), path.join(PUB, 'js/app.js'));
+copyFileSync(path.join(root, 'src/refresh.js'), path.join(PUB, 'js/refresh.js'));
 copyFileSync(path.join(root, 'src/favicon.svg'), path.join(PUB, 'favicon.svg'));
 for (const f of ['current.json', 'history-7d.json', 'history-30d.json']) {
   copyFileSync(path.join(root, 'data', f), path.join(PUB, 'data', f));
