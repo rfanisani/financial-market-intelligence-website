@@ -57,7 +57,7 @@ function table(codes, lang) {
 }
 
 // --- charts (inline SVG, generated at build time) ---------------------------
-function chartSvg(series, label) {
+function chartSvg(series, label, lang = 'en') {
   const w = 560, h = 170, pad = 12;
   const all = series.flatMap((s) => s.values);
   const min = Math.min(...all), max = Math.max(...all), span = max - min || 1;
@@ -71,8 +71,8 @@ function chartSvg(series, label) {
     `<line x1="${pad}" y1="${y(max).toFixed(1)}" x2="${w - pad}" y2="${y(max).toFixed(1)}" stroke="currentColor" stroke-opacity=".12"/>` +
     `<line x1="${pad}" y1="${y(min).toFixed(1)}" x2="${w - pad}" y2="${y(min).toFixed(1)}" stroke="currentColor" stroke-opacity=".12"/>` +
     lines +
-    `<text x="${pad}" y="${y(max) - 4}" font-size="10" fill="currentColor" fill-opacity=".55">${fmt(max, max < 10 ? 2 : 0, 'en')}</text>` +
-    `<text x="${pad}" y="${y(min) + 12}" font-size="10" fill="currentColor" fill-opacity=".55">${fmt(min, min < 10 ? 2 : 0, 'en')}</text>` +
+    `<text x="${pad}" y="${y(max) - 4}" font-size="10" fill="currentColor" fill-opacity=".55">${fmt(max, max < 10 ? 2 : 0, lang)}</text>` +
+    `<text x="${pad}" y="${y(min) + 12}" font-size="10" fill="currentColor" fill-opacity=".55">${fmt(min, min < 10 ? 2 : 0, lang)}</text>` +
     `</svg>`;
 }
 
@@ -158,7 +158,8 @@ function homeBody(lang) {
   const implied = impliedSeries();
   const chart = chartSvg(
     [{ values: implied, color: '#d97706' }, { values: h7.a.USDIRR, color: '#3b82f6' }],
-    `${t.impliedDollar} / ${t.actualUsd}`
+    `${t.impliedDollar} / ${t.actualUsd}`,
+    lang
   );
   const sources = [...new Set(Object.values(data.s))]
     .map((s) => i18n.srcNames[s]?.[lang] ?? s).join(' · ');
@@ -174,7 +175,7 @@ function categoryBody(lang, slug, codes, chartAsset, chartColor) {
   const t = i18n[lang];
   const meta = i18n.pages[slug][lang];
   const chart = h7.a[chartAsset]
-    ? card(t.chart7d, chartSvg([{ values: h7.a[chartAsset], color: chartColor }], name(chartAsset, lang)))
+    ? card(t.chart7d, chartSvg([{ values: h7.a[chartAsset], color: chartColor }], name(chartAsset, lang), lang))
     : '';
   return `<h1>${esc(meta.t.split(' | ')[0].trim())}</h1><p class="muted">${meta.i}</p>${statusLine(lang)}
   ${card(t.th.price, table(codes, lang))}${chart}`;
