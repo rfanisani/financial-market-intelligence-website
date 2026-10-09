@@ -141,7 +141,11 @@ function shell({ lang, slug, body, extraHead = '' }) {
 <nav aria-label="footer"><a href="${navLink('about/')}">${t.nav.about}</a><a href="${navLink('calculator/')}">${t.nav.calculator}</a></nav>
 <script type="application/json" id="i18n-refresh">${JSON.stringify({ refreshing: t.refreshing, upToDate: t.refreshUpToDate, failed: t.refreshFailed })}</script>
 <script src="${prefix}js/refresh.js" defer></script>
-</div></footer></body></html>`;
+</div></footer>
+<div class="statusbar"><div class="wrap sb-in">
+<span class="sb-views">${t.views}: <img class="hits" src="https://hits.sh/fanisani.ir.svg" alt="${t.viewsAlt}" height="16"></span>
+<span class="sb-upd">${t.lastUpdate}: <span class="num">${fmtTime(data.t, lang)}</span></span>
+</div></div></body></html>`;
 }
 
 const statusLine = (lang) => {
