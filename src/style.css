@@ -107,6 +107,11 @@ form input, form select {
 /* Footer */
 footer { border-top: 1px solid var(--border); background: var(--surface); padding: 18px 0 26px; font-size: .85rem; color: var(--muted); }
 footer nav { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+/* Thin fixed status bar: site views + data freshness */
+body { padding-bottom: 38px; }
+.statusbar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; background: var(--surface); border-top: 1px solid var(--border); font-size: .72rem; color: var(--muted); }
+.sb-in { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 30px; padding: 4px 0; flex-wrap: wrap; }
+.sb-in .hits { height: 16px; vertical-align: -3px; border-radius: 3px; }
 .refresh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .refresh .btn { margin-top: 0; padding: 6px 14px; font-size: .85rem; }
 .refresh .btn:disabled { opacity: .6; cursor: wait; }
