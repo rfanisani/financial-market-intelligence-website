@@ -107,3 +107,7 @@ form input, form select {
 /* Footer */
 footer { border-top: 1px solid var(--border); background: var(--surface); padding: 18px 0 26px; font-size: .85rem; color: var(--muted); }
 footer nav { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.refresh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.refresh .btn { margin-top: 0; padding: 6px 14px; font-size: .85rem; }
+.refresh .btn:disabled { opacity: .6; cursor: wait; }
+#refresh-msg { color: var(--muted); }
