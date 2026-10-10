@@ -9,6 +9,7 @@
     "start": "next start",
     "build:site": "node scripts/build.mjs",
     "fetch-data": "node scripts/fetch-data.mjs",
+    "fast-update": "node scripts/fetch-data.mjs && node scripts/build.mjs",
     "test": "node scripts/test.mjs",
     "size-check": "node scripts/size-check.mjs"
   },

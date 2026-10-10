@@ -126,3 +126,19 @@ dl.kv dd { margin: 0; font-weight: 600; }
 #lab-result .result p:first-child { margin-top: 0; }
 #lab-result .chart { margin-top: 8px; }
 #lab-result .kv { margin-bottom: 4px; }
+
+/* Trend tabs & switcher */
+.trend-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.trend-header h2 { margin: 0; }
+.trend-tabs { display: inline-flex; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 2px; gap: 2px; }
+.trend-tab { background: transparent; border: 0; border-radius: 6px; padding: 4px 10px; font: inherit; font-size: .82rem; color: var(--muted); cursor: pointer; transition: background .15s, color .15s; }
+.trend-tab:hover { color: var(--text); }
+.trend-tab.active, .trend-tab[aria-selected="true"] { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.trend-panel[hidden] { display: none !important; }
+
+/* Fast-update animation */
+@keyframes flashUpdate {
+  0% { background-color: var(--accent-soft); }
+  100% { background-color: transparent; }
+}
+.flash-update { animation: flashUpdate 1.4s ease-out; }

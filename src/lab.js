@@ -23,8 +23,13 @@ const cls = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : 'flat');
 const fill = (tpl, map) => Object.entries(map).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, v), tpl);
 
 const byCode = Object.fromEntries(D.assets.map((a) => [a.code, a]));
-const seriesFor = (code, w) => (byCode[code] ? (w === 30 ? byCode[code].s30 : byCode[code].s7) : null);
-const metaFor = (w) => (w === 30 ? D.w30 : D.w7);
+const seriesFor = (code, w) => {
+  if (!byCode[code]) return null;
+  if (w === 365) return byCode[code].s365;
+  if (w === 30) return byCode[code].s30;
+  return byCode[code].s7;
+};
+const metaFor = (w) => (w === 365 ? D.w365 : (w === 30 ? D.w30 : D.w7));
 const unit = (a) => (a.unit ? ` <small class="u">${esc(a.unit)}</small>` : '');
 
 // Source + time-window line shown under every result (transparency requirement).
