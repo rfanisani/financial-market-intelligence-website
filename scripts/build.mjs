@@ -16,6 +16,7 @@ if (!SITE_URL) console.warn('[build] SITE_URL not set - canonical/OG/sitemap wil
 const data = JSON.parse(readFileSync(path.join(root, 'data/current.json'), 'utf8'));
 const h7 = JSON.parse(readFileSync(path.join(root, 'data/history-7d.json'), 'utf8'));
 const h30 = JSON.parse(readFileSync(path.join(root, 'data/history-30d.json'), 'utf8'));
+const h1y = JSON.parse(readFileSync(path.join(root, 'data/history-1y.json'), 'utf8'));
 const assets = JSON.parse(readFileSync(path.join(root, 'src/assets.json'), 'utf8'));
 const i18n = JSON.parse(readFileSync(path.join(root, 'src/i18n.json'), 'utf8'));
 
@@ -52,7 +53,7 @@ function table(codes, lang) {
     const a = assets[code], row = data.a[code];
     const cls = row.c > 0 ? 'up' : row.c < 0 ? 'down' : 'flat';
     const arrow = row.c > 0 ? '&#9650;' : row.c < 0 ? '&#9660;' : '';
-    return `<tr><td>${name(code, lang)}</td><td class="p num">${fmt(row.v, a.d, lang)}${unit(code, lang) ? ` <small class="u">${unit(code, lang)}</small>` : ''}</td><td class="num ${cls}">${arrow} ${fmtPct(row.c, lang)}</td><td class="u">${esc(srcName(code, lang))}</td></tr>`;
+    return `<tr data-code="${code}"><td>${name(code, lang)}</td><td class="p num">${fmt(row.v, a.d, lang)}${unit(code, lang) ? ` <small class="u">${unit(code, lang)}</small>` : ''}</td><td class="num ${cls}">${arrow} ${fmtPct(row.c, lang)}</td><td class="u">${esc(srcName(code, lang))}</td></tr>`;
   }).join('');
   return `<table><thead><tr><th scope="col">${t.asset}</th><th scope="col">${t.price}</th><th scope="col">${t.change}</th><th scope="col">${t.source}</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -77,8 +78,25 @@ function chartSvg(series, label, lang = 'en') {
     `</svg>`;
 }
 
-const impliedSeries = () => {
-  const au = h7.a.AU18, xau = h7.a.XAU;
+function trendCard({ title, periods, lang, legendHtml = '' }) {
+  const tabs = periods.map((p, i) =>
+    `<button type="button" class="trend-tab${i === 0 ? ' active' : ''}" role="tab" aria-selected="${i === 0 ? 'true' : 'false'}" data-period="${p.id}">${esc(p.label)}</button>`
+  ).join('');
+  const panels = periods.map((p, i) =>
+    `<div class="trend-panel" data-panel="${p.id}" role="tabpanel"${i === 0 ? '' : ' hidden'}>${p.svg}</div>`
+  ).join('');
+  return `<section class="card trend-card">
+    <div class="trend-header">
+      <h2>${esc(title)}</h2>
+      <div class="trend-tabs" role="tablist">${tabs}</div>
+    </div>
+    ${panels}
+    ${legendHtml}
+  </section>`;
+}
+
+const impliedSeries = (h = h7) => {
+  const au = h.a.AU18, xau = h.a.XAU;
   return au.map((v, i) => impliedUsd({ domesticPrice: v, globalOunceUsd: xau[i], purity: 0.75 }));
 };
 
@@ -140,7 +158,8 @@ function shell({ lang, slug, body, extraHead = '' }) {
 <p>${esc(t.disclaimer)}</p>
 <div class="refresh"><button type="button" class="btn" id="refresh-btn">${esc(t.refresh)}</button><span id="refresh-msg" role="status" aria-live="polite"></span></div>
 <nav aria-label="footer"><a href="${navLink('about/')}">${t.nav.about}</a><a href="${navLink('calculator/')}">${t.nav.calculator}</a></nav>
-<script type="application/json" id="i18n-refresh">${JSON.stringify({ refreshing: t.refreshing, upToDate: t.refreshUpToDate, failed: t.refreshFailed })}</script>
+<script type="application/json" id="i18n-refresh">${JSON.stringify({ refreshing: t.refreshing, upToDate: t.refreshUpToDate, failed: t.refreshFailed, fastUpdated: t.refreshFastUpdated })}</script>
+<script src="${prefix}js/trend.js" defer></script>
 <script src="${prefix}js/refresh.js" defer></script>
 </div></footer>
 <div class="statusbar"><div class="wrap sb-in">
@@ -160,30 +179,79 @@ const legend = (lang, items) => `<div class="legend">${items.map(([c, k]) => `<s
 // --- pages ------------------------------------------------------------------
 function homeBody(lang) {
   const t = i18n[lang];
-  const implied = impliedSeries();
-  const chart = chartSvg(
-    [{ values: implied, color: '#d97706' }, { values: h7.a.USDIRR, color: '#3b82f6' }],
-    `${t.impliedDollar} / ${t.actualUsd}`,
-    lang
-  );
+  const trend = trendCard({
+    title: t.trendCharts,
+    lang,
+    periods: [
+      {
+        id: '7d',
+        label: t.pWeek,
+        svg: chartSvg(
+          [{ values: impliedSeries(h7), color: '#d97706' }, { values: h7.a.USDIRR, color: '#3b82f6' }],
+          `${t.impliedDollar} / ${t.actualUsd} (${t.pWeek})`,
+          lang
+        ),
+      },
+      {
+        id: '30d',
+        label: t.pMonth,
+        svg: chartSvg(
+          [{ values: impliedSeries(h30), color: '#d97706' }, { values: h30.a.USDIRR, color: '#3b82f6' }],
+          `${t.impliedDollar} / ${t.actualUsd} (${t.pMonth})`,
+          lang
+        ),
+      },
+      {
+        id: '1y',
+        label: t.pYear,
+        svg: chartSvg(
+          [{ values: impliedSeries(h1y), color: '#d97706' }, { values: h1y.a.USDIRR, color: '#3b82f6' }],
+          `${t.impliedDollar} / ${t.actualUsd} (${t.pYear})`,
+          lang
+        ),
+      },
+    ],
+    legendHtml: legend(lang, [['#d97706', 'legendImplied'], ['#3b82f6', 'legendActual']]),
+  });
   const sources = [...new Set(Object.values(data.s))]
     .map((s) => i18n.srcNames[s]?.[lang] ?? s).join(' · ');
   return `<h1>${esc(t.siteName)}</h1><p class="muted">${t.homeIntro}</p>${statusLine(lang)}
   <div class="grid2">${card(t.globalMarkets, table(G.global, lang))}${card(t.iranMarkets, table(G.iran, lang))}</div>
   ${card(t.goldSection, table(G.gold, lang))}
   ${card(t.impliedDollar, impliedSection(lang))}
-  ${card(t.chart7d, chart + legend(lang, [['#d97706', 'legendImplied'], ['#3b82f6', 'legendActual']]))}
+  ${trend}
   ${card(t.dataSources, `<p>${sources}</p><p class="muted">${t.secondarySource}</p><p class="muted">${t.lastUpdate}: <span class="num">${fmtTime(data.t, lang)}</span></p>`)}`;
 }
 
 function categoryBody(lang, slug, codes, chartAsset, chartColor) {
   const t = i18n[lang];
   const meta = i18n.pages[slug][lang];
-  const chart = h7.a[chartAsset]
-    ? card(t.chart7d, chartSvg([{ values: h7.a[chartAsset], color: chartColor }], name(chartAsset, lang), lang))
+  const hasHistory = h7.a[chartAsset] && h30.a[chartAsset] && h1y.a[chartAsset];
+  const trend = hasHistory
+    ? trendCard({
+        title: `${name(chartAsset, lang)} — ${t.trendTitle}`,
+        lang,
+        periods: [
+          {
+            id: '7d',
+            label: t.pWeek,
+            svg: chartSvg([{ values: h7.a[chartAsset], color: chartColor }], `${name(chartAsset, lang)} (${t.pWeek})`, lang),
+          },
+          {
+            id: '30d',
+            label: t.pMonth,
+            svg: chartSvg([{ values: h30.a[chartAsset], color: chartColor }], `${name(chartAsset, lang)} (${t.pMonth})`, lang),
+          },
+          {
+            id: '1y',
+            label: t.pYear,
+            svg: chartSvg([{ values: h1y.a[chartAsset], color: chartColor }], `${name(chartAsset, lang)} (${t.pYear})`, lang),
+          },
+        ],
+      })
     : '';
   return `<h1>${esc(meta.t.split(' | ')[0].trim())}</h1><p class="muted">${meta.i}</p>${statusLine(lang)}
-  ${card(t.th.price, table(codes, lang))}${chart}`;
+  ${card(t.th.price, table(codes, lang))}${trend}`;
 }
 
 function calculatorBody(lang) {
@@ -218,7 +286,7 @@ const LAB_ASSETS = ['XAU', 'XAG', 'BRENT', 'WTI', 'USDIRR', 'AU18'];
 function labBody(lang) {
   const L = i18n[lang].lab;
   const labAssets = LAB_ASSETS
-    .filter((code) => Array.isArray(h7.a[code]) && Array.isArray(h30.a[code]) && assets[code])
+    .filter((code) => Array.isArray(h7.a[code]) && Array.isArray(h30.a[code]) && Array.isArray(h1y.a[code]) && assets[code])
     .map((code) => ({
       code,
       name: name(code, lang),
@@ -227,12 +295,14 @@ function labBody(lang) {
       src: srcName(code, lang),
       s7: h7.a[code],
       s30: h30.a[code],
+      s365: h1y.a[code],
     }));
   const labData = JSON.stringify({
     lang,
     assets: labAssets,
     w7: { t0: h7.t0, dt: h7.dt },
     w30: { t0: h30.t0, dt: h30.dt },
+    w365: { t0: h1y.t0, dt: h1y.dt },
   });
   const opts = labAssets.map((a) => `<option value="${a.code}">${esc(a.name)}</option>`).join('');
   const tools = [['return', L.tReturn], ['risk', L.tRisk], ['trend', L.tTrend], ['compare', L.tCompare]]
@@ -245,11 +315,11 @@ function labBody(lang) {
   <section class="card"><form id="lab-form">
     <div class="fgrid">
       <div><label for="lab-tool">${esc(L.tool)}</label><select id="lab-tool">${tools}</select></div>
-      <div><label for="lab-window">${esc(L.window)}</label><select id="lab-window"><option value="7">${esc(L.window7)}</option><option value="30">${esc(L.window30)}</option></select></div>
+      <div><label for="lab-window">${esc(L.window)}</label><select id="lab-window"><option value="7">${esc(L.window7)}</option><option value="30">${esc(L.window30)}</option><option value="365">${esc(L.window365)}</option></select></div>
       <div id="lab-f-asset"><label for="lab-asset">${esc(L.asset)}</label><select id="lab-asset">${opts}</select></div>
       <div id="lab-f-asset-a" hidden><label for="lab-asset-a">${esc(L.assetA)}</label><select id="lab-asset-a">${opts}</select></div>
       <div id="lab-f-asset-b" hidden><label for="lab-asset-b">${esc(L.assetB)}</label><select id="lab-asset-b">${opts}</select></div>
-      <div id="lab-f-ma" hidden><label for="lab-ma">${esc(L.maWindow)}</label><input id="lab-ma" type="number" min="2" max="30" step="1" value="7"></div>
+      <div id="lab-f-ma" hidden><label for="lab-ma">${esc(L.maWindow)}</label><input id="lab-ma" type="number" min="2" max="200" step="1" value="7"></div>
     </div>
     <button class="btn" type="submit" id="lab-run">${esc(L.run)}</button>
     <div id="lab-result" aria-live="polite"><p class="muted">${esc(L.empty)}</p></div>
@@ -300,11 +370,12 @@ mkdirSync(path.join(PUB, 'data'), { recursive: true });
 copyFileSync(path.join(root, 'src/style.css'), path.join(PUB, 'css/style.css'));
 copyFileSync(path.join(root, 'src/calc.js'), path.join(PUB, 'js/calc.js'));
 copyFileSync(path.join(root, 'src/app.js'), path.join(PUB, 'js/app.js'));
+copyFileSync(path.join(root, 'src/trend.js'), path.join(PUB, 'js/trend.js'));
 copyFileSync(path.join(root, 'src/refresh.js'), path.join(PUB, 'js/refresh.js'));
 copyFileSync(path.join(root, 'src/lab.js'), path.join(PUB, 'js/lab.js'));
 copyFileSync(path.join(root, 'src/lab-calc.js'), path.join(PUB, 'js/lab-calc.js'));
 copyFileSync(path.join(root, 'src/favicon.svg'), path.join(PUB, 'favicon.svg'));
-for (const f of ['current.json', 'history-7d.json', 'history-30d.json']) {
+for (const f of ['current.json', 'history-7d.json', 'history-30d.json', 'history-1y.json']) {
   copyFileSync(path.join(root, 'data', f), path.join(PUB, 'data', f));
 }
 

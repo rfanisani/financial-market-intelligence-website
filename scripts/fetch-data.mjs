@@ -150,12 +150,23 @@ if (isMain) {
     ['tgju', providerTgju],
   ];
 
+  // Concurrent fetch for fast updates (Promise.allSettled), preserving
+  // override priority by applying results in strict provider order.
+  const results = await Promise.allSettled(
+    providers.map(async ([name, fn]) => {
+      const values = await fn();
+      return { name, values };
+    })
+  );
+
   const updates = {}; // code -> {v, s, c?}
   const perProvider = {}; // name -> {code: v} for cross-checking
   let failures = 0;
-  for (const [name, fn] of providers) {
-    try {
-      const values = await fn();
+  for (let i = 0; i < providers.length; i++) {
+    const [name] = providers[i];
+    const r = results[i];
+    if (r.status === 'fulfilled') {
+      const values = r.value.values;
       perProvider[name] = {};
       for (const [code, u0] of Object.entries(values)) {
         const u = typeof u0 === 'object' && u0 !== null ? u0 : { v: u0 };
@@ -163,9 +174,9 @@ if (isMain) {
         perProvider[name][code] = u.v;
       }
       console.log(`[fetch] ${name}: ${Object.keys(values).length} assets`);
-    } catch (e) {
+    } else {
       failures++;
-      console.warn(`[fetch] ${name} failed: ${e.message} (keeping last known good values)`);
+      console.warn(`[fetch] ${name} failed: ${r.reason?.message || r.reason} (keeping last known good values)`);
     }
   }
 
