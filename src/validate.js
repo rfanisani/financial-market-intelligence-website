@@ -18,6 +18,18 @@ export function validateCurrent(data, { maxAgeSec = 3 * 86400, now = Date.now() 
     errors.push('missing asset map a');
     return { ok: errors.length === 0, errors };
   }
+  // Optional per-asset freshness map ({f:{XAU:1791679991}}).
+  if (data.f !== undefined) {
+    if (typeof data.f !== 'object' || data.f === null || Array.isArray(data.f)) {
+      errors.push('field f must be an object');
+    } else {
+      for (const [code, ts] of Object.entries(data.f)) {
+        if (!Number.isFinite(ts) || ts <= 0) {
+          errors.push(`${code}: invalid freshness timestamp ${ts}`);
+        }
+      }
+    }
+  }
   // Source is either a compact top-level map ({s:{XAU:'src'}}) or per-row.
   for (const [code, row] of Object.entries(data.a)) {
     if (!Number.isFinite(row.v) || row.v <= 0) errors.push(`${code}: invalid value ${row.v}`);

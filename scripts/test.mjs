@@ -14,6 +14,11 @@ import {
   simpleReturns, periodReturn, volatility, maxDrawdown,
   sma, trendSignal, normalize, correlation, compareAssets,
 } from '../src/lab-calc.js';
+import {
+  OUNCE_GRAMS as GS_OUNCE_GRAMS, KILOGRAM_GRAMS,
+  convertWeight, convertCurrency, goldSilverRatio, filterTimeRange, computeSeriesStats,
+  SUPPORTED_CURRENCIES, SUPPORTED_UNITS, SUPPORTED_RANGES,
+} from '../src/gold-silver-calc.js';
 import { validateCurrent, validateHistory } from '../src/validate.js';
 import { providerNavasan } from './fetch-data.mjs';
 
@@ -72,6 +77,8 @@ test('current.json seed data is valid', () => {
   const res = validateCurrent(data, { now: data.t + 60 });
   assert.deepEqual(res.errors, []);
   assert.ok(res.ok);
+  assert.ok(data.f && typeof data.f === 'object', 'freshness map f is present');
+  assert.ok(Object.keys(data.f).length >= 6, 'freshness map covers assets');
 });
 
 test('stale data is rejected', () => {
@@ -459,9 +466,138 @@ test('history: validation rejects malformed structures, negative prices and exce
   assert.equal(validateHistory({ t0: 100, dt: 86400, a: { XAU: new Array(401).fill(10) } }, { maxPoints: 400 }).ok, false);
 });
 
+// --- Gold & Silver Analysis Tests --------------------------------------------
+
+test('gold-silver: weight unit conversions (oz, g, kg)', () => {
+  assert.equal(convertWeight(100, 'oz'), 100);
+  assert.ok(Math.abs(convertWeight(GS_OUNCE_GRAMS, 'g') - 1) < 1e-12);
+  assert.ok(Math.abs(convertWeight(GS_OUNCE_GRAMS, 'kg') - 1000) < 1e-9);
+  assert.equal(convertWeight(0, 'oz'), null);
+  assert.equal(convertWeight(-10, 'oz'), null);
+  assert.equal(convertWeight(100, 'unknown'), null);
+  assert.equal(convertWeight(NaN, 'oz'), null);
+});
+
+test('gold-silver: currency conversion with reference rates', () => {
+  const rates = { USD: 1, EUR: 0.9, AED: 3.6725, TOMAN: 260000, IRR: 2600000, GBP: 0.75 };
+  assert.equal(convertCurrency(100, 'USD', rates), 100);
+  assert.equal(convertCurrency(100, 'EUR', rates), 90);
+  assert.equal(convertCurrency(100, 'AED', rates), 367.25);
+  assert.equal(convertCurrency(100, 'TOMAN', rates), 26000000);
+  assert.equal(convertCurrency(100, 'IRR', rates), 260000000);
+  assert.equal(convertCurrency(100, 'GBP', rates), 75);
+
+  assert.equal(convertCurrency(100, 'UNSUPPORTED', rates), null);
+  assert.equal(convertCurrency(0, 'EUR', rates), null);
+  assert.equal(convertCurrency(-5, 'EUR', rates), null);
+});
+
+test('gold-silver: gold-to-silver ratio calculation and invariance', () => {
+  const g = 4200, s = 60;
+  const ratio = goldSilverRatio(g, s);
+  assert.equal(ratio, 70.0);
+
+  // Ratio must remain invariant when converting to grams
+  const gInGrams = convertWeight(g, 'g');
+  const sInGrams = convertWeight(s, 'g');
+  const ratioInGrams = goldSilverRatio(gInGrams, sInGrams);
+  assert.ok(Math.abs(ratioInGrams - 70.0) < 1e-9);
+
+  // Ratio must remain invariant when converting to Toman
+  const gInToman = convertCurrency(g, 'TOMAN', { TOMAN: 267505 });
+  const sInToman = convertCurrency(s, 'TOMAN', { TOMAN: 267505 });
+  const ratioInToman = goldSilverRatio(gInToman, sInToman);
+  assert.ok(Math.abs(ratioInToman - 70.0) < 1e-9);
+
+  assert.equal(goldSilverRatio(0, 60), null);
+  assert.equal(goldSilverRatio(4200, 0), null);
+  assert.equal(goldSilverRatio(-4200, 60), null);
+});
+
+test('gold-silver: historical time range filtering', () => {
+  const dummyDataset = {
+    daily: {
+      t0: 1700000000,
+      dt: 86400,
+      gold: new Array(365).fill(4000).map((v, i) => v + i),
+      silver: new Array(365).fill(50).map((v, i) => v + i * 0.1),
+    },
+    monthly: [
+      { d: '2024-01', t: 1704067200, g: 2050, s: 23 },
+      { d: '2024-02', t: 1706745600, g: 2080, s: 24 },
+      { d: '2024-03', t: 1709251200, g: 2150, s: 25 },
+    ],
+  };
+
+  assert.equal(filterTimeRange(dummyDataset, '1d').points.length, 1);
+  assert.equal(filterTimeRange(dummyDataset, '7d').points.length, 7);
+  assert.equal(filterTimeRange(dummyDataset, '30d').points.length, 30);
+  assert.equal(filterTimeRange(dummyDataset, '1y').points.length, 365);
+  assert.equal(filterTimeRange(dummyDataset, '2y').points.length, 3);
+  assert.equal(filterTimeRange(dummyDataset, 'all').points.length, 3);
+  assert.equal(filterTimeRange(null, '7d').points.length, 0);
+  assert.equal(filterTimeRange(dummyDataset, 'unknown').points.length, 0);
+});
+
+test('gold-silver: series statistics calculation', () => {
+  const stats = computeSeriesStats([100, 150, 80, 120]);
+  assert.equal(stats.min, 80);
+  assert.equal(stats.max, 150);
+  assert.equal(stats.first, 100);
+  assert.equal(stats.last, 120);
+  assert.equal(stats.change, 20);
+  assert.equal(stats.changePct, 20);
+  assert.equal(stats.avg, 112.5);
+
+  assert.equal(computeSeriesStats([]), null);
+  assert.equal(computeSeriesStats(null), null);
+  assert.equal(computeSeriesStats([-10, 0]), null);
+});
+
+test('gold-silver: generated pages exist in fa and en with correct navigation, direction and wiring', () => {
+  assert.ok(existsSync(path.join(PUB, 'js/gold-silver.js')), 'public/js/gold-silver.js is built');
+  assert.ok(existsSync(path.join(PUB, 'js/gold-silver-calc.js')), 'public/js/gold-silver-calc.js is built');
+  assert.ok(existsSync(path.join(PUB, 'data/gold-silver-history.json')), 'public/data/gold-silver-history.json is built');
+
+  for (const [lang, dir] of [['fa', 'rtl'], ['en', 'ltr']]) {
+    const p = path.join(PUB, lang, 'gold-silver/index.html');
+    assert.ok(existsSync(p), `${lang} gold-silver page exists`);
+    const html = readFileSync(p, 'utf8');
+    assert.ok(html.includes(`<html lang="${lang}" dir="${dir}">`), `${lang}: html lang/dir`);
+    assert.ok(html.includes('src="../../js/gold-silver.js"'), `${lang}: gold-silver module script`);
+    assert.ok(html.includes('id="gs-asset"'), `${lang}: asset selector`);
+    assert.ok(html.includes('id="gs-currency"'), `${lang}: currency selector`);
+    assert.ok(html.includes('id="gs-unit"'), `${lang}: unit selector`);
+    assert.ok(html.includes('id="gs-range"'), `${lang}: range selector`);
+    assert.ok(html.includes('id="gs-chart-wrap"'), `${lang}: chart wrap`);
+    assert.ok(html.includes('id="kpi-current"'), `${lang}: kpi current`);
+    assert.ok(html.includes('id="kpi-ratio"'), `${lang}: kpi ratio`);
+    assert.ok(html.includes('id="gs-data"'), `${lang}: embedded gs-data`);
+    assert.ok(html.includes('id="i18n-gs"'), `${lang}: embedded i18n-gs`);
+  }
+
+  // Navigation check across pages
+  const faHome = readFileSync(path.join(PUB, 'fa/index.html'), 'utf8');
+  assert.ok(faHome.includes('href="gold-silver/"'), 'fa home: gold-silver tab link');
+  const enHome = readFileSync(path.join(PUB, 'en/index.html'), 'utf8');
+  assert.ok(enHome.includes('href="gold-silver/"'), 'en home: gold-silver tab link');
+});
+
+test('gold-silver: dataset schema and integrity', () => {
+  const gs = JSON.parse(readFileSync(path.join(root, 'data/gold-silver-history.json'), 'utf8'));
+  assert.ok(Number.isFinite(gs.updated), 'updated timestamp exists');
+  assert.ok(gs.rates && typeof gs.rates === 'object', 'rates object exists');
+  for (const c of ['USD', 'EUR', 'AED', 'TOMAN', 'IRR']) {
+    assert.ok(Number.isFinite(gs.rates[c]) && gs.rates[c] > 0, `rate for ${c} is positive`);
+  }
+  assert.ok(Array.isArray(gs.daily.gold) && gs.daily.gold.length === 365, 'daily gold has 365 points');
+  assert.ok(Array.isArray(gs.daily.silver) && gs.daily.silver.length === 365, 'daily silver has 365 points');
+  assert.ok(Array.isArray(gs.monthly) && gs.monthly.length >= 250, 'monthly points span over 20 years');
+});
+
 test('no secrets or development artifacts leak into the production output', () => {
   const chunks = listHtml(PUB).map((p) => readFileSync(p, 'utf8'));
-  for (const f of ['js/lab.js', 'js/lab-calc.js', 'js/app.js', 'js/calc.js', 'js/trend.js', 'js/refresh.js', 'css/style.css']) {
+  for (const f of ['js/lab.js', 'js/lab-calc.js', 'js/app.js', 'js/calc.js', 'js/trend.js', 'js/refresh.js', 'js/gold-silver.js', 'js/gold-silver-calc.js', 'css/style.css']) {
     chunks.push(readFileSync(path.join(PUB, f), 'utf8'));
   }
   const all = chunks.join('\n');

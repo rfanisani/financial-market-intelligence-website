@@ -197,7 +197,7 @@ if (isMain) {
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const next = { t: now, s: { ...prev.s }, a: {} };
+  const next = { t: now, s: { ...prev.s }, a: {}, f: { ...(prev.f || {}) } };
   for (const code of Object.keys(prev.a)) {
     const u = updates[code];
     const old = prev.a[code];
@@ -214,6 +214,7 @@ if (isMain) {
     } else c = old.c;
     next.a[code] = { v: round(code, v), c: +c.toFixed(2) };
     next.s[code] = u ? u.s : prev.s[code];
+    next.f[code] = u ? now : (Number.isFinite(prev.f?.[code]) ? prev.f[code] : prev.t);
   }
 
   const check = validateCurrent(next);
