@@ -72,6 +72,8 @@ test('current.json seed data is valid', () => {
   const res = validateCurrent(data, { now: data.t + 60 });
   assert.deepEqual(res.errors, []);
   assert.ok(res.ok);
+  assert.ok(data.f && typeof data.f === 'object', 'freshness map f is present');
+  assert.ok(Object.keys(data.f).length >= 6, 'freshness map covers assets');
 });
 
 test('stale data is rejected', () => {

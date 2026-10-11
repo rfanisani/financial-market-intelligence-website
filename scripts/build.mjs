@@ -69,12 +69,13 @@ function chartSvg(series, label, lang = 'en') {
   const lines = series.map((s) =>
     `<polyline fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" points="${s.values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}"/>`
   ).join('');
+  const decimals = max < 1000 ? 2 : (Number.isInteger(max) && Number.isInteger(min) ? 0 : 1);
   return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}">` +
     `<line x1="${pad}" y1="${y(max).toFixed(1)}" x2="${w - pad}" y2="${y(max).toFixed(1)}" stroke="currentColor" stroke-opacity=".12"/>` +
     `<line x1="${pad}" y1="${y(min).toFixed(1)}" x2="${w - pad}" y2="${y(min).toFixed(1)}" stroke="currentColor" stroke-opacity=".12"/>` +
     lines +
-    `<text x="${pad}" y="${y(max) - 4}" font-size="10" fill="currentColor" fill-opacity=".55">${fmt(max, max < 10 ? 2 : 0, lang)}</text>` +
-    `<text x="${pad}" y="${y(min) + 12}" font-size="10" fill="currentColor" fill-opacity=".55">${fmt(min, min < 10 ? 2 : 0, lang)}</text>` +
+    `<text x="${pad}" y="${y(max) - 4}" font-size="10" fill="currentColor" fill-opacity=".55">${fmt(max, decimals, lang)}</text>` +
+    `<text x="${pad}" y="${y(min) + 12}" font-size="10" fill="currentColor" fill-opacity=".55">${fmt(min, decimals, lang)}</text>` +
     `</svg>`;
 }
 
