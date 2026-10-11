@@ -142,3 +142,23 @@ dl.kv dd { margin: 0; font-weight: 600; }
   100% { background-color: transparent; }
 }
 .flash-update { animation: flashUpdate 1.4s ease-out; }
+
+/* Interactive Gold & Silver Market Analysis */
+.gs-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.gs-controls .disabled { opacity: 0.45; pointer-events: none; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.kpi-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+.kpi-label { font-size: 0.78rem; color: var(--muted); margin-bottom: 4px; }
+.kpi-val { font-size: 1.15rem; font-weight: 700; color: var(--text); }
+.kpi-val.up { color: #16a34a; }
+.kpi-val.down { color: #dc2626; }
+.kpi-val.flat { color: var(--muted); }
+.gs-chart-container { position: relative; width: 100%; min-height: 280px; margin-top: 8px; }
+.gs-chart-svg { width: 100%; height: auto; display: block; overflow: visible; cursor: crosshair; }
+.gs-tooltip { position: absolute; pointer-events: none; background: rgba(17, 24, 39, 0.92); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; box-shadow: 0 4px 6px rgba(0,0,0,0.15); z-index: 10; white-space: nowrap; transform: translateY(-100%); transition: opacity 0.1s; }
+.gs-tooltip .tt-date { font-size: 0.72rem; color: #94a3b8; }
+.gs-tooltip .tt-val { font-weight: 700; color: #f8fafc; font-size: 0.9rem; }
+.gs-tooltip .tt-sub { font-size: 0.75rem; color: #cbd5e1; }
+.chart-empty { padding: 40px; text-align: center; }
+.gs-note { font-size: 0.82rem; margin-top: 10px; }
+

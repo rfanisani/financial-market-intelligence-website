@@ -2,7 +2,17 @@
   "fa": {
     "siteName": "رصد بازار",
     "tagline": "قیمت‌های کلیدی بازارهای مالی — سبک، سریع، بدون حاشیه",
-    "nav": { "home": "خانه", "gold": "طلا", "currency": "ارز", "oil": "نفت", "iranGold": "طلا و سکه ایران", "lab": "آزمایشگاه", "calculator": "ماشین‌حساب", "about": "درباره" },
+    "nav": {
+      "home": "خانه",
+      "gold": "طلا",
+      "currency": "ارز",
+      "oil": "نفت",
+      "iranGold": "طلا و سکه ایران",
+      "lab": "آزمایشگاه",
+      "calculator": "ماشین‌حساب",
+      "about": "درباره",
+      "goldSilver": "تحلیل طلا و نقره"
+    },
     "globalMarkets": "بازارهای جهانی",
     "iranMarkets": "بازار ایران",
     "goldSection": "طلا و سکه",
@@ -20,7 +30,12 @@
     "status": "وضعیت داده",
     "fresh": "به‌روز",
     "stale": "قدیمی",
-    "th": { "asset": "دارایی", "price": "قیمت", "change": "تغییر", "source": "منبع" },
+    "th": {
+      "asset": "دارایی",
+      "price": "قیمت",
+      "change": "تغییر",
+      "source": "منبع"
+    },
     "actualUsd": "دلار (بازار آزاد)",
     "impliedUsd": "دلار ضمنی (طلای ۱۸)",
     "impliedCoin": "دلار ضمنی (سکه)",
@@ -126,12 +141,75 @@
     "refreshFailed": "به‌روزرسانی ناموفق بود — دوباره تلاش کنید.",
     "langOther": "English",
     "skip": "پرش به محتوا",
-    "homeIntro": "نمای کلی بازارهای جهانی و ایران در یک نگاه."
+    "homeIntro": "نمای کلی بازارهای جهانی و ایران در یک نگاه.",
+    "gs": {
+      "title": "تحلیل بازار طلا و نقره",
+      "intro": "نمودار تحلیلی تعاملی طلا، نقره و نسبت طلا به نقره در بازه‌های زمانی مختلف همراه با تبدیل ارز و واحدهای وزنی.",
+      "controlAsset": "نوع تحلیل",
+      "controlCurrency": "ارز",
+      "controlUnit": "واحد وزن",
+      "controlRange": "بازه تاریخی",
+      "optGold": "طلا (Gold)",
+      "optSilver": "نقره (Silver)",
+      "optRatio": "نسبت طلا به نقره (Gold/Silver Ratio)",
+      "currencies": {
+        "USD": "دلار ($)",
+        "EUR": "یورو (€)",
+        "AED": "درهم امارات (AED)",
+        "TOMAN": "تومان",
+        "IRR": "ریال",
+        "GBP": "پوند (£)"
+      },
+      "units": {
+        "oz": "اونس تروا (oz)",
+        "g": "گرم (g)",
+        "kg": "کیلوگرم (kg)"
+      },
+      "ranges": {
+        "1d": "۱ روز",
+        "3d": "۳ روز",
+        "7d": "۷ روز",
+        "30d": "۳۰ روز",
+        "60d": "۶۰ روز",
+        "6m": "۶ ماه",
+        "1y": "۱ سال",
+        "2y": "۲ سال",
+        "5y": "۵ سال",
+        "10y": "۱۰ سال",
+        "15y": "۱۵ سال",
+        "20y": "۲۰ سال",
+        "30y": "۳۰ سال",
+        "all": "کل سوابق (۲۶ سال)"
+      },
+      "kpiCurrent": "مقدار / قیمت جاری",
+      "kpiChange": "تغییر در بازه",
+      "kpiHigh": "بیشترین مقدار",
+      "kpiLow": "کمترین مقدار",
+      "kpiRatio": "نسبت طلا/نقره",
+      "ratio": "نسبت طلا به نقره",
+      "emptyData": "داده‌ای برای این بازه یافت نشد.",
+      "chartAria": "نمودار تعاملی قیمت‌های طلا و نقره",
+      "methodTitle": "روش محاسبات و شفافیت منابع داده",
+      "methodRatio": "نسبت طلا به نقره = قیمت طلا بر واحد وزن ÷ قیمت نقره بر همان واحد وزن. این نسبت بدون بعد بوده و با تغییر ارز یا واحد وزن تغییر نمی‌کند.",
+      "methodUnits": "۱ اونس تروا = ۳۱٫۱۰۳۴۷۶۸ گرم | ۱ کیلوگرم = ۱۰۰۰ گرم",
+      "methodCurrencies": "ارز مبنا دلار آمریکا (USD) است. تبدیل به درهم با نرخ رسمی ۳٫۶۷۲۵، تبدیل به یورو و پوند با نرخ‌های رسمی بانک مرکزی اروپا (ECB)، و تبدیل به تومان/ریال با نرخ‌های بازار آزاد تهران انجام شده است.",
+      "sourceNote": "منابع داده: بورس کالای شیکاگو (COMEX via Yahoo Finance) و آرشیو تحلیلی TGJU. سوابق پیوسته معاملات الکترونیکی از سپتامبر ۲۰۰۰ تا کنون ثبت شده است."
+    }
   },
   "en": {
     "siteName": "Market Radar",
     "tagline": "Key financial market prices — light, fast, no clutter",
-    "nav": { "home": "Home", "gold": "Gold", "currency": "Currency", "oil": "Oil", "iranGold": "Iran Gold & Coins", "lab": "Lab", "calculator": "Calculator", "about": "About" },
+    "nav": {
+      "home": "Home",
+      "gold": "Gold",
+      "currency": "Currency",
+      "oil": "Oil",
+      "iranGold": "Iran Gold & Coins",
+      "lab": "Lab",
+      "calculator": "Calculator",
+      "about": "About",
+      "goldSilver": "Gold & Silver"
+    },
     "globalMarkets": "Global Markets",
     "iranMarkets": "Iran Market",
     "goldSection": "Gold & Coins",
@@ -149,7 +227,12 @@
     "status": "Data status",
     "fresh": "Fresh",
     "stale": "Stale",
-    "th": { "asset": "Asset", "price": "Price", "change": "Change", "source": "Source" },
+    "th": {
+      "asset": "Asset",
+      "price": "Price",
+      "change": "Change",
+      "source": "Source"
+    },
     "actualUsd": "USD (free market)",
     "impliedUsd": "Implied USD (18K)",
     "impliedCoin": "Implied USD (coin)",
@@ -255,50 +338,201 @@
     "refreshFailed": "Update failed — please try again.",
     "langOther": "فارسی",
     "skip": "Skip to content",
-    "homeIntro": "An overview of global and Iranian markets at a glance."
+    "homeIntro": "An overview of global and Iranian markets at a glance.",
+    "gs": {
+      "title": "Gold & Silver Market Analysis",
+      "intro": "Interactive market analysis for gold, silver, and gold-to-silver ratio across multiple currencies, units, and historical timeframes.",
+      "controlAsset": "Asset / Metric",
+      "controlCurrency": "Currency",
+      "controlUnit": "Weight Unit",
+      "controlRange": "Time Range",
+      "optGold": "Gold",
+      "optSilver": "Silver",
+      "optRatio": "Gold-to-Silver Ratio",
+      "currencies": {
+        "USD": "USD ($)",
+        "EUR": "EUR (€)",
+        "AED": "AED (Dirham)",
+        "TOMAN": "Toman",
+        "IRR": "Rial (IRR)",
+        "GBP": "GBP (£)"
+      },
+      "units": {
+        "oz": "Troy Ounce (oz)",
+        "g": "Gram (g)",
+        "kg": "Kilogram (kg)"
+      },
+      "ranges": {
+        "1d": "1 Day",
+        "3d": "3 Days",
+        "7d": "7 Days",
+        "30d": "30 Days",
+        "60d": "60 Days",
+        "6m": "6 Months",
+        "1y": "1 Year",
+        "2y": "2 Years",
+        "5y": "5 Years",
+        "10y": "10 Years",
+        "15y": "15 Years",
+        "20y": "20 Years",
+        "30y": "30 Years",
+        "all": "All Available (26 Years)"
+      },
+      "kpiCurrent": "Current Price / Value",
+      "kpiChange": "Period Change",
+      "kpiHigh": "Period High",
+      "kpiLow": "Period Low",
+      "kpiRatio": "Gold/Silver Ratio",
+      "ratio": "Gold/Silver Ratio",
+      "emptyData": "No data available for the selected timeframe.",
+      "chartAria": "Interactive Gold and Silver Market Chart",
+      "methodTitle": "Methodology & Data Sources",
+      "methodRatio": "Gold-to-Silver Ratio = Gold price per unit weight / Silver price per same unit weight. The ratio is dimensionless and invariant to currency or weight unit.",
+      "methodUnits": "1 troy ounce = 31.1034768 grams | 1 kilogram = 1,000 grams",
+      "methodCurrencies": "Reference currency is USD. AED is pegged at 3.6725. EUR and GBP use ECB reference rates. Toman/IRR use Tehran free market exchange rates.",
+      "sourceNote": "Data sources: COMEX futures (via Yahoo Finance) and TGJU archive. Continuous electronic observations available from September 2000 to present."
+    }
   },
   "srcNames": {
-    "seed": { "fa": "داده نمونه", "en": "Seed (sample)" },
-    "gold-api": { "fa": "Gold-API", "en": "Gold-API" },
-    "frankfurter": { "fa": "ECB (Frankfurter)", "en": "ECB (Frankfurter)" },
-    "stooq": { "fa": "Stooq", "en": "Stooq" },
-    "tgju": { "fa": "TGJU", "en": "TGJU" },
-    "yahoo": { "fa": "Yahoo Finance", "en": "Yahoo Finance" },
-    "navasan": { "fa": "ناوسان", "en": "Navasan" },
-    "manual": { "fa": "دستی", "en": "Manual" }
+    "seed": {
+      "fa": "داده نمونه",
+      "en": "Seed (sample)"
+    },
+    "gold-api": {
+      "fa": "Gold-API",
+      "en": "Gold-API"
+    },
+    "frankfurter": {
+      "fa": "ECB (Frankfurter)",
+      "en": "ECB (Frankfurter)"
+    },
+    "stooq": {
+      "fa": "Stooq",
+      "en": "Stooq"
+    },
+    "tgju": {
+      "fa": "TGJU",
+      "en": "TGJU"
+    },
+    "yahoo": {
+      "fa": "Yahoo Finance",
+      "en": "Yahoo Finance"
+    },
+    "navasan": {
+      "fa": "ناوسان",
+      "en": "Navasan"
+    },
+    "manual": {
+      "fa": "دستی",
+      "en": "Manual"
+    }
   },
   "pages": {
     "home": {
-      "fa": { "t": "قیمت طلا، دلار و نفت | رصد بازار", "d": "قیمت لحظه‌ای طلا، سکه، دلار و نفت در بازارهای جهانی و ایران، به‌همراه محاسبه دلار ضمنی — سبک و سریع." },
-      "en": { "t": "Gold, USD & Oil Prices | Market Radar", "d": "Key gold, coin, dollar and oil prices across global and Iranian markets, with implied USD calculation — light and fast." }
+      "fa": {
+        "t": "قیمت طلا، دلار و نفت | رصد بازار",
+        "d": "قیمت لحظه‌ای طلا، سکه، دلار و نفت در بازارهای جهانی و ایران، به‌همراه محاسبه دلار ضمنی — سبک و سریع."
+      },
+      "en": {
+        "t": "Gold, USD & Oil Prices | Market Radar",
+        "d": "Key gold, coin, dollar and oil prices across global and Iranian markets, with implied USD calculation — light and fast."
+      }
     },
     "gold": {
-      "fa": { "t": "قیمت طلا و نقره | رصد بازار", "d": "قیمت جهانی طلا و نقره به دلار و قیمت طلای ۱۸ و ۲۴ عیار و سکه در بازار ایران.", "i": "قیمت جهانی فلزات گران‌بها و مقایسه با بازار داخلی طلا." },
-      "en": { "t": "Gold & Silver Prices | Market Radar", "d": "Global gold and silver prices in USD alongside Iranian 18K/24K gold and coin rates.", "i": "Global precious metal prices compared with the domestic Iranian gold market." }
+      "fa": {
+        "t": "قیمت طلا و نقره | رصد بازار",
+        "d": "قیمت جهانی طلا و نقره به دلار و قیمت طلای ۱۸ و ۲۴ عیار و سکه در بازار ایران.",
+        "i": "قیمت جهانی فلزات گران‌بها و مقایسه با بازار داخلی طلا."
+      },
+      "en": {
+        "t": "Gold & Silver Prices | Market Radar",
+        "d": "Global gold and silver prices in USD alongside Iranian 18K/24K gold and coin rates.",
+        "i": "Global precious metal prices compared with the domestic Iranian gold market."
+      }
     },
     "currency": {
-      "fa": { "t": "قیمت ارز و دلار | رصد بازار", "d": "نرخ ارزهای جهانی (یورو، پوند، ین) و نرخ دلار، یورو و پوند در بازار آزاد ایران.", "i": "نرخ ارزهای اصلی جهانی در کنار نرخ آزاد دلار در ایران." },
-      "en": { "t": "Currency & Dollar Rates | Market Radar", "d": "Major FX rates (EUR, GBP, JPY) and free-market USD, EUR and GBP rates in Iran.", "i": "Major global FX rates alongside Iran's free-market dollar rate." }
+      "fa": {
+        "t": "قیمت ارز و دلار | رصد بازار",
+        "d": "نرخ ارزهای جهانی (یورو، پوند، ین) و نرخ دلار، یورو و پوند در بازار آزاد ایران.",
+        "i": "نرخ ارزهای اصلی جهانی در کنار نرخ آزاد دلار در ایران."
+      },
+      "en": {
+        "t": "Currency & Dollar Rates | Market Radar",
+        "d": "Major FX rates (EUR, GBP, JPY) and free-market USD, EUR and GBP rates in Iran.",
+        "i": "Major global FX rates alongside Iran's free-market dollar rate."
+      }
     },
     "oil": {
-      "fa": { "t": "قیمت نفت برنت و WTI | رصد بازار", "d": "قیمت نفت خام برنت و WTI به دلار در هر بشکه، با روند ۷ روزه.", "i": "قیمت دو بنچمارک اصلی نفت خام جهان." },
-      "en": { "t": "Brent & WTI Oil Prices | Market Radar", "d": "Brent and WTI crude oil prices in USD per barrel with a 7-day trend.", "i": "The two benchmark crude oils of the global market." }
+      "fa": {
+        "t": "قیمت نفت برنت و WTI | رصد بازار",
+        "d": "قیمت نفت خام برنت و WTI به دلار در هر بشکه، با روند ۷ روزه.",
+        "i": "قیمت دو بنچمارک اصلی نفت خام جهان."
+      },
+      "en": {
+        "t": "Brent & WTI Oil Prices | Market Radar",
+        "d": "Brent and WTI crude oil prices in USD per barrel with a 7-day trend.",
+        "i": "The two benchmark crude oils of the global market."
+      }
     },
     "iran-gold": {
-      "fa": { "t": "قیمت طلا و سکه در ایران | رصد بازار", "d": "قیمت طلای ۱۸ و ۲۴ عیار، سکه امامی، نیم‌سکه و ربع‌سکه در بازار ایران.", "i": "قیمت‌های داخلی طلا و سکه بر اساس بازار آزاد تهران." },
-      "en": { "t": "Iran Gold & Coin Prices | Market Radar", "d": "18K and 24K gold, Emami, half and quarter coin prices in the Iranian market.", "i": "Domestic gold and coin prices based on Tehran's free market." }
+      "fa": {
+        "t": "قیمت طلا و سکه در ایران | رصد بازار",
+        "d": "قیمت طلای ۱۸ و ۲۴ عیار، سکه امامی، نیم‌سکه و ربع‌سکه در بازار ایران.",
+        "i": "قیمت‌های داخلی طلا و سکه بر اساس بازار آزاد تهران."
+      },
+      "en": {
+        "t": "Iran Gold & Coin Prices | Market Radar",
+        "d": "18K and 24K gold, Emami, half and quarter coin prices in the Iranian market.",
+        "i": "Domestic gold and coin prices based on Tehran's free market."
+      }
     },
     "lab": {
-      "fa": { "t": "آزمایشگاه اطلاعات مالی | رصد بازار", "d": "تحلیل بازده، نوسان، افت از اوج و روند دارایی‌ها بر اساس تاریخچه قیمت‌های منتشرشده — محاسبه در مرورگر.", "i": "چهار ابزار آماری سبک روی تاریخچه قیمت‌های منتشرشده." },
-      "en": { "t": "Financial Intelligence Lab | Market Radar", "d": "Return, volatility, drawdown and trend analysis based on the published price history — calculated in your browser.", "i": "Four lightweight statistical tools over the published price history." }
+      "fa": {
+        "t": "آزمایشگاه اطلاعات مالی | رصد بازار",
+        "d": "تحلیل بازده، نوسان، افت از اوج و روند دارایی‌ها بر اساس تاریخچه قیمت‌های منتشرشده — محاسبه در مرورگر.",
+        "i": "چهار ابزار آماری سبک روی تاریخچه قیمت‌های منتشرشده."
+      },
+      "en": {
+        "t": "Financial Intelligence Lab | Market Radar",
+        "d": "Return, volatility, drawdown and trend analysis based on the published price history — calculated in your browser.",
+        "i": "Four lightweight statistical tools over the published price history."
+      }
     },
     "calculator": {
-      "fa": { "t": "ماشین‌حساب دلار ضمنی | رصد بازار", "d": "محاسبه دلار ضمنی از قیمت طلای داخلی و جهانی، و محاسبه قیمت مورد انتظار طلا از نرخ دلار.", "i": "دو جهت محاسبه: طلا به دلار ضمنی، و دلار به قیمت طلای مورد انتظار." },
-      "en": { "t": "Implied USD Calculator | Market Radar", "d": "Calculate the implied USD rate from domestic and global gold prices, or the expected gold price from a USD rate.", "i": "Both directions: gold to implied USD, and USD to expected gold price." }
+      "fa": {
+        "t": "ماشین‌حساب دلار ضمنی | رصد بازار",
+        "d": "محاسبه دلار ضمنی از قیمت طلای داخلی و جهانی، و محاسبه قیمت مورد انتظار طلا از نرخ دلار.",
+        "i": "دو جهت محاسبه: طلا به دلار ضمنی، و دلار به قیمت طلای مورد انتظار."
+      },
+      "en": {
+        "t": "Implied USD Calculator | Market Radar",
+        "d": "Calculate the implied USD rate from domestic and global gold prices, or the expected gold price from a USD rate.",
+        "i": "Both directions: gold to implied USD, and USD to expected gold price."
+      }
     },
     "about": {
-      "fa": { "t": "درباره | رصد بازار", "d": "درباره رصد بازار، روش جمع‌آوری داده و سلب مسئولیت.", "i": "" },
-      "en": { "t": "About | Market Radar", "d": "About Market Radar, our data methodology and disclaimer.", "i": "" }
+      "fa": {
+        "t": "درباره | رصد بازار",
+        "d": "درباره رصد بازار، روش جمع‌آوری داده و سلب مسئولیت.",
+        "i": ""
+      },
+      "en": {
+        "t": "About | Market Radar",
+        "d": "About Market Radar, our data methodology and disclaimer.",
+        "i": ""
+      }
+    },
+    "gold-silver": {
+      "fa": {
+        "t": "تحلیل بازار طلا و نقره | رصد بازار",
+        "d": "نمودار تعاملی و تحلیل قیمت‌های طلا و نقره و نسبت طلا به نقره با امکان انتخاب ارز و واحد وزن و بازه‌های زمانی متنوع.",
+        "i": "تحلیل مقایسه‌ای و پویای طلا، نقره و نسبت طلا به نقره بر اساس سوابق تاریخی بازارهای جهانی."
+      },
+      "en": {
+        "t": "Gold & Silver Market Analysis | Market Radar",
+        "d": "Interactive chart and analysis of gold and silver prices, gold-to-silver ratio across multiple currencies, weight units and historical ranges.",
+        "i": "Interactive dynamic analysis of gold, silver, and the gold-to-silver ratio based on historical market observations."
+      }
     }
   }
 }

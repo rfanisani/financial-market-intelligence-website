@@ -121,7 +121,7 @@ function impliedSection(lang) {
 }
 
 // --- page shell -------------------------------------------------------------
-const NAV = [['', 'home'], ['gold/', 'gold'], ['currency/', 'currency'], ['oil/', 'oil'], ['iran-gold/', 'iranGold'], ['lab/', 'lab'], ['calculator/', 'calculator'], ['about/', 'about']];
+const NAV = [['', 'home'], ['gold/', 'gold'], ['currency/', 'currency'], ['oil/', 'oil'], ['iran-gold/', 'iranGold'], ['gold-silver/', 'goldSilver'], ['lab/', 'lab'], ['calculator/', 'calculator'], ['about/', 'about']];
 
 function shell({ lang, slug, body, extraHead = '' }) {
   const t = i18n[lang];
@@ -331,6 +331,62 @@ function labBody(lang) {
   return { body, extraHead };
 }
 
+function goldSilverBody(lang) {
+  const gs = i18n[lang].gs;
+  const gsHistoryPath = path.join(root, 'data/gold-silver-history.json');
+  let gsHistoryData = {};
+  try {
+    gsHistoryData = JSON.parse(readFileSync(gsHistoryPath, 'utf8'));
+  } catch {}
+
+  const extraHead =
+    `<script type="application/json" id="i18n-gs">${JSON.stringify(gs)}</script>` +
+    `<script type="application/json" id="gs-data">${JSON.stringify(gsHistoryData)}</script>` +
+    `<script type="module" src="../../js/gold-silver.js"></script>`;
+
+  const optAsset = [
+    ['gold', gs.optGold],
+    ['silver', gs.optSilver],
+    ['ratio', gs.optRatio],
+  ].map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+
+  const optCurrency = Object.entries(gs.currencies)
+    .map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+
+  const optUnit = Object.entries(gs.units)
+    .map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+
+  const optRange = Object.entries(gs.ranges)
+    .map(([v, l]) => `<option value="${v}"${v === '1y' ? ' selected' : ''}>${esc(l)}</option>`).join('');
+
+  const body = `<h1>${esc(gs.title)}</h1><p class="muted">${esc(gs.intro)}</p>${statusLine(lang)}
+  <section class="card">
+    <div class="gs-controls">
+      <div><label for="gs-asset">${esc(gs.controlAsset)}</label><select id="gs-asset">${optAsset}</select></div>
+      <div id="gs-f-currency"><label for="gs-currency">${esc(gs.controlCurrency)}</label><select id="gs-currency">${optCurrency}</select></div>
+      <div id="gs-f-unit"><label for="gs-unit">${esc(gs.controlUnit)}</label><select id="gs-unit">${optUnit}</select></div>
+      <div><label for="gs-range">${esc(gs.controlRange)}</label><select id="gs-range">${optRange}</select></div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">${esc(gs.kpiCurrent)}</div><div class="kpi-val" id="kpi-current">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">${esc(gs.kpiChange)}</div><div class="kpi-val" id="kpi-change">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">${esc(gs.kpiHigh)}</div><div class="kpi-val" id="kpi-high">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">${esc(gs.kpiLow)}</div><div class="kpi-val" id="kpi-low">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">${esc(gs.kpiRatio)}</div><div class="kpi-val" id="kpi-ratio">—</div></div>
+    </div>
+
+    <div id="gs-range-note" class="muted gs-note" hidden></div>
+    <div id="gs-chart-wrap" class="gs-chart-container">
+      <noscript><p class="error">${esc(i18n[lang].lab?.noJs || 'JavaScript is required for interactive charts.')}</p></noscript>
+    </div>
+  </section>
+
+  ${card(gs.methodTitle, `<p>${esc(gs.methodRatio)}</p><p><code>${esc(gs.methodUnits)}</code></p><p class="muted">${esc(gs.methodCurrencies)}</p><p class="muted">${esc(gs.sourceNote)}</p>`)}`;
+
+  return { body, extraHead };
+}
+
 function aboutBody(lang) {
   const a = i18n[lang].about;
   return `<h1>${esc(a.h)}</h1><section class="card"><p>${a.p1}</p><p>${a.p2}</p><p>${a.p3}</p><p><strong>${esc(i18n[lang].disclaimer)}</strong> ${a.p4.replace(/^[^:]*: /, '')}</p></section>`;
@@ -339,11 +395,12 @@ function aboutBody(lang) {
 // --- write everything -------------------------------------------------------
 mkdirSync(PUB, { recursive: true });
 for (const lang of ['fa', 'en']) {
-  for (const slug of ['', 'gold/', 'currency/', 'oil/', 'iran-gold/', 'lab/', 'calculator/', 'about/']) {
+  for (const slug of ['', 'gold/', 'currency/', 'oil/', 'iran-gold/', 'gold-silver/', 'lab/', 'calculator/', 'about/']) {
     const dir = path.join(PUB, lang, slug);
     mkdirSync(dir, { recursive: true });
     const page = slug === 'calculator/' ? calculatorBody(lang)
       : slug === 'lab/' ? labBody(lang)
+      : slug === 'gold-silver/' ? goldSilverBody(lang)
       : null;
     const body = page ? page.body
       : slug === '' ? homeBody(lang)
@@ -375,15 +432,17 @@ copyFileSync(path.join(root, 'src/trend.js'), path.join(PUB, 'js/trend.js'));
 copyFileSync(path.join(root, 'src/refresh.js'), path.join(PUB, 'js/refresh.js'));
 copyFileSync(path.join(root, 'src/lab.js'), path.join(PUB, 'js/lab.js'));
 copyFileSync(path.join(root, 'src/lab-calc.js'), path.join(PUB, 'js/lab-calc.js'));
+copyFileSync(path.join(root, 'src/gold-silver.js'), path.join(PUB, 'js/gold-silver.js'));
+copyFileSync(path.join(root, 'src/gold-silver-calc.js'), path.join(PUB, 'js/gold-silver-calc.js'));
 copyFileSync(path.join(root, 'src/favicon.svg'), path.join(PUB, 'favicon.svg'));
-for (const f of ['current.json', 'history-7d.json', 'history-30d.json', 'history-1y.json']) {
+for (const f of ['current.json', 'history-7d.json', 'history-30d.json', 'history-1y.json', 'gold-silver-history.json']) {
   copyFileSync(path.join(root, 'data', f), path.join(PUB, 'data', f));
 }
 
 writeFileSync(path.join(PUB, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${SITE_URL || ''}/sitemap.xml\n`);
 writeFileSync(path.join(PUB, 'sitemap.xml'),
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` +
-  ['fa', 'en'].flatMap((lang) => ['', 'gold/', 'currency/', 'oil/', 'iran-gold/', 'lab/', 'calculator/', 'about/']
+  ['fa', 'en'].flatMap((lang) => ['', 'gold/', 'currency/', 'oil/', 'iran-gold/', 'gold-silver/', 'lab/', 'calculator/', 'about/']
     .map((s) => `<url><loc>${SITE_URL}/${lang}/${s}</loc><lastmod>${new Date(data.t * 1000).toISOString()}</lastmod></url>`)).join('') +
   `</urlset>\n`);
 

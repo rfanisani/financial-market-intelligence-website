@@ -27,10 +27,15 @@ export async function updateHistory(now = Math.floor(Date.now() / 1000)) {
   const H7_PATH = path.join(root, 'data/history-7d.json');
   const H30_PATH = path.join(root, 'data/history-30d.json');
   const H1Y_PATH = path.join(root, 'data/history-1y.json');
+  const GS_PATH = path.join(root, 'data/gold-silver-history.json');
 
   let prevH1y = null;
+  let prevGs = null;
   try {
     prevH1y = JSON.parse(readFileSync(H1Y_PATH, 'utf8'));
+  } catch {}
+  try {
+    prevGs = JSON.parse(readFileSync(GS_PATH, 'utf8'));
   } catch {}
 
   const dates1y = [];
@@ -179,6 +184,82 @@ export async function updateHistory(now = Math.floor(Date.now() / 1000)) {
   writeFileSync(H30_PATH, JSON.stringify(h30) + '\n');
   writeFileSync(H7_PATH, JSON.stringify(h7) + '\n');
   console.log(`[history] wrote real observed historical data for ${Object.keys(activeAssets).length} assets (7d, 30d, 1y)`);
+
+  // Build and write Gold & Silver comprehensive analysis dataset
+  let monthlyData = prevGs?.monthly || [];
+  try {
+    const [gMonthly, sMonthly] = await Promise.all([
+      getJson('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1mo&range=max'),
+      getJson('https://query1.finance.yahoo.com/v8/finance/chart/SI=F?interval=1mo&range=max'),
+    ]);
+    const gRes = gMonthly.chart?.result?.[0];
+    const sRes = sMonthly.chart?.result?.[0];
+    const gTs = gRes?.timestamp || [];
+    const gCloses = gRes?.indicators?.quote?.[0]?.close || [];
+    const sTs = sRes?.timestamp || [];
+    const sCloses = sRes?.indicators?.quote?.[0]?.close || [];
+
+    const gMap = new Map();
+    for (let i = 0; i < gTs.length; i++) {
+      const v = gCloses[i];
+      if (Number.isFinite(v) && v > 0) {
+        const d = new Date(gTs[i] * 1000).toISOString().slice(0, 7);
+        gMap.set(d, { t: gTs[i], v: +v.toFixed(2) });
+      }
+    }
+    const sMap = new Map();
+    for (let i = 0; i < sTs.length; i++) {
+      const v = sCloses[i];
+      if (Number.isFinite(v) && v > 0) {
+        const d = new Date(sTs[i] * 1000).toISOString().slice(0, 7);
+        sMap.set(d, { t: sTs[i], v: +v.toFixed(2) });
+      }
+    }
+    const matched = [];
+    for (const [m, g] of gMap.entries()) {
+      if (sMap.has(m)) {
+        const s = sMap.get(m);
+        matched.push({ d: m, t: g.t, g: g.v, s: s.v });
+      }
+    }
+    if (matched.length > 0) {
+      matched.sort((a, b) => a.t - b.t);
+      monthlyData = matched;
+      console.log(`[history] Gold & Silver monthly history loaded: ${monthlyData.length} points`);
+    }
+  } catch (err) {
+    console.warn(`[history] Gold & Silver monthly fetch failed: ${err.message} (keeping existing monthly data)`);
+  }
+
+  let currentJson = null;
+  try {
+    currentJson = JSON.parse(readFileSync(path.join(root, 'data/current.json'), 'utf8'));
+  } catch {}
+  const eurUsd = currentJson?.a?.EURUSD?.v || 1.1206;
+  const gbpUsd = currentJson?.a?.GBPUSD?.v || 1.322;
+  const usdIrr = currentJson?.a?.USDIRR?.v || 267505;
+
+  const gsDataset = {
+    updated: now,
+    rates: {
+      USD: 1,
+      EUR: +(1 / eurUsd).toFixed(4),
+      GBP: +(1 / gbpUsd).toFixed(4),
+      AED: 3.6725,
+      TOMAN: usdIrr,
+      IRR: usdIrr * 10,
+    },
+    daily: {
+      t0: dates1y[0].ts,
+      dt: DT,
+      gold: sXau,
+      silver: sXag,
+      usdIrr: sUsd,
+    },
+    monthly: monthlyData,
+  };
+  writeFileSync(GS_PATH, JSON.stringify(gsDataset) + '\n');
+  console.log('[history] wrote data/gold-silver-history.json');
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
