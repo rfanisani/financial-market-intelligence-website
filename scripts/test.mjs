@@ -425,6 +425,40 @@ test('tables include data-code attributes and fast-update script is wired', () =
   }
 });
 
+test('history: exact window boundaries (7d=7, 30d=30, 1y=365) and dt=86400', () => {
+  const h7 = JSON.parse(readFileSync(path.join(root, 'data/history-7d.json'), 'utf8'));
+  const h30 = JSON.parse(readFileSync(path.join(root, 'data/history-30d.json'), 'utf8'));
+  const h1y = JSON.parse(readFileSync(path.join(root, 'data/history-1y.json'), 'utf8'));
+
+  assert.equal(h7.dt, 86400, '7d dt must be 86400s (daily)');
+  assert.equal(h30.dt, 86400, '30d dt must be 86400s (daily)');
+  assert.equal(h1y.dt, 86400, '1y dt must be 86400s (daily)');
+
+  assert.equal(h7.t0 % 86400, 0, '7d t0 must align with midnight UTC');
+  assert.equal(h30.t0 % 86400, 0, '30d t0 must align with midnight UTC');
+  assert.equal(h1y.t0 % 86400, 0, '1y t0 must align with midnight UTC');
+
+  for (const code of ['XAU', 'XAG', 'BRENT', 'WTI', 'USDIRR', 'AU18']) {
+    assert.equal(h7.a[code].length, 7, `${code}: 7d series must have exactly 7 points`);
+    assert.equal(h30.a[code].length, 30, `${code}: 30d series must have exactly 30 points`);
+    assert.equal(h1y.a[code].length, 365, `${code}: 1y series must have exactly 365 points`);
+
+    // Verify terminal points align across windows
+    assert.equal(h7.a[code][h7.a[code].length - 1], h30.a[code][h30.a[code].length - 1], `${code}: latest point matches between 7d and 30d`);
+    assert.equal(h30.a[code][h30.a[code].length - 1], h1y.a[code][h1y.a[code].length - 1], `${code}: latest point matches between 30d and 1y`);
+  }
+});
+
+test('history: validation rejects malformed structures, negative prices and excessive points', () => {
+  assert.equal(validateHistory(null).ok, false);
+  assert.equal(validateHistory({}).ok, false);
+  assert.equal(validateHistory({ t0: 100, dt: 0, a: { XAU: [1, 2] } }).ok, false);
+  assert.equal(validateHistory({ t0: 100, dt: 86400, a: { XAU: [] } }).ok, false);
+  assert.equal(validateHistory({ t0: 100, dt: 86400, a: { XAU: [100, -5] } }).ok, false);
+  assert.equal(validateHistory({ t0: 100, dt: 86400, a: { XAU: [100, NaN] } }).ok, false);
+  assert.equal(validateHistory({ t0: 100, dt: 86400, a: { XAU: new Array(401).fill(10) } }, { maxPoints: 400 }).ok, false);
+});
+
 test('no secrets or development artifacts leak into the production output', () => {
   const chunks = listHtml(PUB).map((p) => readFileSync(p, 'utf8'));
   for (const f of ['js/lab.js', 'js/lab-calc.js', 'js/app.js', 'js/calc.js', 'js/trend.js', 'js/refresh.js', 'css/style.css']) {
