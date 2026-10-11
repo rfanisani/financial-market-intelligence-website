@@ -2,6 +2,7 @@
   "name": "my-project",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@12.3.4",
   "scripts": {
     "dev": "next dev",
@@ -9,6 +10,7 @@
     "start": "next start",
     "build:site": "node scripts/build.mjs",
     "fetch-data": "node scripts/fetch-data.mjs",
+    "fast-update": "node scripts/fetch-data.mjs && node scripts/build.mjs",
     "test": "node scripts/test.mjs",
     "size-check": "node scripts/size-check.mjs"
   },

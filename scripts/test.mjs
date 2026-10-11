@@ -89,7 +89,7 @@ test('missing/invalid fields are rejected', () => {
 });
 
 test('history files are valid', () => {
-  for (const f of ['history-7d.json', 'history-30d.json']) {
+  for (const f of ['history-7d.json', 'history-30d.json', 'history-1y.json']) {
     const h = JSON.parse(readFileSync(path.join(root, 'data', f), 'utf8'));
     const res = validateHistory(h);
     assert.deepEqual(res.errors, [], f);
@@ -341,10 +341,12 @@ test('lab pages exist in both languages with correct direction and wiring', () =
     for (const a of data.assets) {
       assert.ok(Array.isArray(a.s7) && a.s7.length >= 2, `${lang}/${a.code}: 7d series`);
       assert.ok(Array.isArray(a.s30) && a.s30.length >= 2, `${lang}/${a.code}: 30d series`);
+      assert.ok(Array.isArray(a.s365) && a.s365.length >= 2, `${lang}/${a.code}: 1y series`);
       assert.ok(Number.isFinite(a.d) && a.name && a.src, `${lang}/${a.code}: metadata`);
     }
     assert.ok(Number.isFinite(data.w7.t0) && data.w7.dt > 0, `${lang}: 7d window timestamps`);
     assert.ok(Number.isFinite(data.w30.t0) && data.w30.dt > 0, `${lang}: 30d window timestamps`);
+    assert.ok(Number.isFinite(data.w365.t0) && data.w365.dt > 0, `${lang}: 1y window timestamps`);
     const L = JSON.parse(html.match(/<script type="application\/json" id="i18n-lab">([\s\S]*?)<\/script>/)[1]);
     for (const k of ['title', 'tool', 'asset', 'assetA', 'assetB', 'window', 'run', 'empty', 'noJs',
       'sameAsset', 'dataMissing', 'insufficient', 'periodReturn', 'volatility', 'maxDrawdown',
@@ -395,9 +397,71 @@ test('lab pages carry the data-status line, disclaimer and method notes', () => 
   }
 });
 
+test('trend switcher tabs exist for week, month, and year on home and category pages', () => {
+  assert.ok(existsSync(path.join(PUB, 'js/trend.js')), 'public/js/trend.js is built');
+  assert.ok(existsSync(path.join(PUB, 'data/history-1y.json')), 'public/data/history-1y.json is built');
+  for (const lang of ['fa', 'en']) {
+    for (const slug of ['', 'gold/', 'currency/', 'oil/', 'iran-gold/']) {
+      const p = path.join(PUB, lang, slug, 'index.html');
+      const html = readFileSync(p, 'utf8');
+      assert.ok(html.includes('class="card trend-card"'), `${lang}/${slug}: trend card`);
+      assert.ok(html.includes('data-period="7d"'), `${lang}/${slug}: 7d tab`);
+      assert.ok(html.includes('data-period="30d"'), `${lang}/${slug}: 30d tab`);
+      assert.ok(html.includes('data-period="1y"'), `${lang}/${slug}: 1y tab`);
+      assert.ok(html.includes('data-panel="7d"'), `${lang}/${slug}: 7d panel`);
+      assert.ok(html.includes('data-panel="30d"'), `${lang}/${slug}: 30d panel`);
+      assert.ok(html.includes('data-panel="1y"'), `${lang}/${slug}: 1y panel`);
+      assert.ok(html.includes('js/trend.js'), `${lang}/${slug}: trend.js script wired`);
+    }
+  }
+});
+
+test('tables include data-code attributes and fast-update script is wired', () => {
+  for (const lang of ['fa', 'en']) {
+    const homeHtml = readFileSync(path.join(PUB, lang, 'index.html'), 'utf8');
+    assert.ok(homeHtml.includes('data-code="XAU"'), `${lang}: data-code attribute on asset rows`);
+    assert.ok(homeHtml.includes('data-code="USDIRR"'), `${lang}: data-code on USDIRR`);
+    assert.ok(homeHtml.includes('fastUpdated'), `${lang}: fastUpdated string in refresh payload`);
+  }
+});
+
+test('history: exact window boundaries (7d=7, 30d=30, 1y=365) and dt=86400', () => {
+  const h7 = JSON.parse(readFileSync(path.join(root, 'data/history-7d.json'), 'utf8'));
+  const h30 = JSON.parse(readFileSync(path.join(root, 'data/history-30d.json'), 'utf8'));
+  const h1y = JSON.parse(readFileSync(path.join(root, 'data/history-1y.json'), 'utf8'));
+
+  assert.equal(h7.dt, 86400, '7d dt must be 86400s (daily)');
+  assert.equal(h30.dt, 86400, '30d dt must be 86400s (daily)');
+  assert.equal(h1y.dt, 86400, '1y dt must be 86400s (daily)');
+
+  assert.equal(h7.t0 % 86400, 0, '7d t0 must align with midnight UTC');
+  assert.equal(h30.t0 % 86400, 0, '30d t0 must align with midnight UTC');
+  assert.equal(h1y.t0 % 86400, 0, '1y t0 must align with midnight UTC');
+
+  for (const code of ['XAU', 'XAG', 'BRENT', 'WTI', 'USDIRR', 'AU18']) {
+    assert.equal(h7.a[code].length, 7, `${code}: 7d series must have exactly 7 points`);
+    assert.equal(h30.a[code].length, 30, `${code}: 30d series must have exactly 30 points`);
+    assert.equal(h1y.a[code].length, 365, `${code}: 1y series must have exactly 365 points`);
+
+    // Verify terminal points align across windows
+    assert.equal(h7.a[code][h7.a[code].length - 1], h30.a[code][h30.a[code].length - 1], `${code}: latest point matches between 7d and 30d`);
+    assert.equal(h30.a[code][h30.a[code].length - 1], h1y.a[code][h1y.a[code].length - 1], `${code}: latest point matches between 30d and 1y`);
+  }
+});
+
+test('history: validation rejects malformed structures, negative prices and excessive points', () => {
+  assert.equal(validateHistory(null).ok, false);
+  assert.equal(validateHistory({}).ok, false);
+  assert.equal(validateHistory({ t0: 100, dt: 0, a: { XAU: [1, 2] } }).ok, false);
+  assert.equal(validateHistory({ t0: 100, dt: 86400, a: { XAU: [] } }).ok, false);
+  assert.equal(validateHistory({ t0: 100, dt: 86400, a: { XAU: [100, -5] } }).ok, false);
+  assert.equal(validateHistory({ t0: 100, dt: 86400, a: { XAU: [100, NaN] } }).ok, false);
+  assert.equal(validateHistory({ t0: 100, dt: 86400, a: { XAU: new Array(401).fill(10) } }, { maxPoints: 400 }).ok, false);
+});
+
 test('no secrets or development artifacts leak into the production output', () => {
   const chunks = listHtml(PUB).map((p) => readFileSync(p, 'utf8'));
-  for (const f of ['js/lab.js', 'js/lab-calc.js', 'js/app.js', 'js/calc.js', 'js/refresh.js', 'css/style.css']) {
+  for (const f of ['js/lab.js', 'js/lab-calc.js', 'js/app.js', 'js/calc.js', 'js/trend.js', 'js/refresh.js', 'css/style.css']) {
     chunks.push(readFileSync(path.join(PUB, f), 'utf8'));
   }
   const all = chunks.join('\n');
