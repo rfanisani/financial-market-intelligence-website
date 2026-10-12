@@ -226,6 +226,17 @@ test('every page has the footer refresh button wired to refresh.js', () => {
   }
 });
 
+test('root index.html defaults to English (en/) and refresh.js supports auto-update on load', () => {
+  const rootIndex = readFileSync(path.join(PUB, 'index.html'), 'utf8');
+  assert.ok(rootIndex.includes("location.replace('en/')"), 'root index redirects to en/');
+  assert.ok(rootIndex.includes('content="0;url=en/"'), 'root meta refresh points to en/');
+  assert.ok(rootIndex.includes('lang="en"'), 'root html lang is en');
+
+  const refreshJs = readFileSync(path.join(PUB, 'js/refresh.js'), 'utf8');
+  assert.ok(refreshJs.includes('DOMContentLoaded'), 'refresh.js hooks DOMContentLoaded for auto-refresh');
+  assert.ok(refreshJs.includes('fetchLiveReferenceQuotes'), 'refresh.js checks live reference quotes on load');
+});
+
 // --- Financial Intelligence Lab: calculation correctness ----------------------
 // Deterministic fixtures — no network, no randomness.
 

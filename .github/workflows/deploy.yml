@@ -2,7 +2,7 @@ name: Build & Deploy
 
 on:
   schedule:
-    - cron: '7 */4 * * *' # ~every 4 hours (GitHub may delay; real timestamp is stored in data)
+    - cron: '*/30 * * * *' # Every 30 minutes (real timestamp stored in data)
   push:
     branches: [main]
   workflow_dispatch:

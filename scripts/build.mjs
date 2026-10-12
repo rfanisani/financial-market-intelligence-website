@@ -416,7 +416,7 @@ for (const lang of ['fa', 'en']) {
 // Persian-first: the audience is Iranian (.ir domain), so the root always
 // lands on /fa/ regardless of browser locale; English stays reachable via
 // the header switcher and the noscript fallback links.
-writeFileSync(path.join(PUB, 'index.html'), `<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><title>رصد بازار | Market Radar</title><script>location.replace('fa/')</script><meta http-equiv="refresh" content="0;url=fa/"><link rel="canonical" href="${SITE_URL}/"></head><body><noscript><a href="fa/">فارسی</a> · <a href="en/">English</a></noscript></body></html>`);
+writeFileSync(path.join(PUB, 'index.html'), `<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8"><title>Market Radar | رصد بازار</title><script>location.replace('en/')</script><meta http-equiv="refresh" content="0;url=en/"><link rel="canonical" href="${SITE_URL}/"></head><body><noscript><a href="en/">English</a> · <a href="fa/">فارسی</a></noscript></body></html>`);
 
 // 404: redirect home
 writeFileSync(path.join(PUB, '404.html'), `<!doctype html><html><head><meta charset="utf-8"><script>location.replace('./')</script><meta http-equiv="refresh" content="0;url=./"></head><body></body></html>`);
