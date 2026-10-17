@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync, stat
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { impliedUsd, difference, OUNCE_GRAMS } from '../src/calc.js';
+import { volatility, maxDrawdown, trendSignal } from '../src/lab-calc.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUB = path.join(root, 'public');
@@ -18,6 +19,11 @@ const h7 = JSON.parse(readFileSync(path.join(root, 'data/history-7d.json'), 'utf
 const h30 = JSON.parse(readFileSync(path.join(root, 'data/history-30d.json'), 'utf8'));
 const h1y = JSON.parse(readFileSync(path.join(root, 'data/history-1y.json'), 'utf8'));
 const assets = JSON.parse(readFileSync(path.join(root, 'src/assets.json'), 'utf8'));
+// Homepage strip (1-day / 1-week change). Written by scripts/fetch-data.mjs.
+const ticker = (() => { try { return JSON.parse(readFileSync(path.join(root, 'data/ticker.json'), 'utf8')); } catch { return { items: {} }; } })();
+// Market pages: one-year daily history per market (data/market-history.json, written by fetch-data).
+const MARKETS = JSON.parse(readFileSync(path.join(root, 'src/markets.json'), 'utf8'));
+const mhist = (() => { try { return JSON.parse(readFileSync(path.join(root, 'data/market-history.json'), 'utf8')); } catch { return { markets: {} }; } })();
 const i18n = JSON.parse(readFileSync(path.join(root, 'src/i18n.json'), 'utf8'));
 
 const nowAgeH = (Date.now() / 1000 - data.t) / 3600;
@@ -53,9 +59,9 @@ function table(codes, lang) {
     const a = assets[code], row = data.a[code];
     const cls = row.c > 0 ? 'up' : row.c < 0 ? 'down' : 'flat';
     const arrow = row.c > 0 ? '&#9650;' : row.c < 0 ? '&#9660;' : '';
-    return `<tr data-code="${code}"><td>${name(code, lang)}</td><td class="p num">${fmt(row.v, a.d, lang)}${unit(code, lang) ? ` <small class="u">${unit(code, lang)}</small>` : ''}</td><td class="num ${cls}">${arrow} ${fmtPct(row.c, lang)}</td><td class="u">${esc(srcName(code, lang))}</td></tr>`;
+    return `<tr data-code="${code}" data-v="${row.v}" data-d="${a.d}"><td>${name(code, lang)}</td><td class="p num">${fmt(row.v, a.d, lang)}${unit(code, lang) ? ` <small class="u">${unit(code, lang)}</small>` : ''}</td><td class="num ${cls}">${arrow} ${fmtPct(row.c, lang)}</td><td class="u">${esc(srcName(code, lang))}</td></tr>`;
   }).join('');
-  return `<table><thead><tr><th scope="col">${t.asset}</th><th scope="col">${t.price}</th><th scope="col">${t.change}</th><th scope="col">${t.source}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<div class="tw"><table><thead><tr><th scope="col">${t.asset}</th><th scope="col">${t.price}</th><th scope="col">${t.change}</th><th scope="col">${t.source}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 // --- charts (inline SVG, generated at build time) ---------------------------
@@ -106,16 +112,16 @@ function impliedSection(lang) {
   const usd = data.a.USDIRR.v;
   const i18v = impliedUsd({ domesticPrice: data.a.AU18.v, globalOunceUsd: data.a.XAU.v, purity: 0.75 });
   const iCoin = impliedUsd({ domesticPrice: data.a.COIN.v, globalOunceUsd: data.a.XAU.v, purity: 0.9, weightGrams: 8.133 });
-  const row = (label, v, d) => {
+  const row = (key, label, v, d) => {
     const cls = d && d.abs >= 0 ? 'up' : 'down';
-    return `<tr><td>${label}</td><td class="p num">${fmt(v, 0, lang)}</td>` +
-      (d ? `<td class="num ${cls}">${fmt(d.abs, 0, lang)}</td><td class="num ${cls}">${fmtPct(d.pct, lang)}</td>` : '<td>—</td><td>—</td>') + '</tr>';
+    return `<tr data-implied="${key}"><td>${label}</td><td class="p num" data-col="v">${fmt(v, 0, lang)}</td>` +
+      (d ? `<td class="num ${cls}" data-col="abs">${fmt(d.abs, 0, lang)}</td><td class="num ${cls}" data-col="pct">${fmtPct(d.pct, lang)}</td>` : '<td data-col="abs">—</td><td data-col="pct">—</td>') + '</tr>';
   };
-  return `<table><thead><tr><th scope="col">${t.th.asset}</th><th scope="col">${t.th.price}</th><th scope="col">${t.difference}</th><th scope="col">${t.diffPct}</th></tr></thead><tbody>` +
-    row(t.actualUsd, usd, null) +
-    row(t.impliedUsd, i18v, difference(usd, i18v)) +
-    row(t.impliedCoin, iCoin, difference(usd, iCoin)) +
-    `</tbody></table>
+  return `<div class="tw"><table><thead><tr><th scope="col">${t.th.asset}</th><th scope="col">${t.th.price}</th><th scope="col">${t.difference}</th><th scope="col">${t.diffPct}</th></tr></thead><tbody>` +
+    row('actual', t.actualUsd, usd, null) +
+    row('ai18', t.impliedUsd, i18v, difference(usd, i18v)) +
+    row('icoin', t.impliedCoin, iCoin, difference(usd, iCoin)) +
+    `</tbody></table></div>
     <details><summary>${t.method}</summary><p>${t.methodNote}</p><p><code>${esc(t.methodFormula)}</code></p></details>`;
 }
 
@@ -125,14 +131,16 @@ const NAV = [['', 'home'], ['gold/', 'gold'], ['currency/', 'currency'], ['oil/'
 function shell({ lang, slug, body, extraHead = '' }) {
   const t = i18n[lang];
   const meta = i18n.pages[slug || 'home'][lang];
-  const prefix = slug ? '../../' : '../'; // root-level assets (css/js/favicon/data)
+  const depth = slug ? slug.split('/').length : 0; // directory levels below /<lang>/
+  const prefix = '../'.repeat(depth + 1); // root-level assets (css/js/favicon/data)
   // In-language links must stay inside /<lang>/ : from /fa/ the tabs are
   // "gold/", from /fa/gold/ they are "../gold/". Using the asset prefix here
   // broke navigation (links resolved to /gold/ -> 404 -> back to home).
-  const navLink = (href) => (href === '' ? (slug ? '../' : './') : `${slug ? '../' : ''}${href}`);
+  const up = '../'.repeat(depth);
+  const navLink = (href) => (href === '' ? (depth ? up : './') : `${up}${href}`);
   const url = `${SITE_URL}/${lang}/${slug ? slug + '/' : ''}`;
   const other = lang === 'fa' ? 'en' : 'fa';
-  const switchHref = slug ? `../../${other}/${slug}/` : `../${other}/`;
+  const switchHref = `${'../'.repeat(depth + 1)}${other}/${slug ? slug + '/' : ''}`;
   const nav = NAV.map(([href, key]) =>
     `<a href="${navLink(href)}"${key === (slug || 'home') ? ' aria-current="page"' : ''}>${t.nav[key]}</a>`).join('');
   const jsonLd = slug
@@ -146,6 +154,7 @@ function shell({ lang, slug, body, extraHead = '' }) {
 <meta property="og:type" content="website"><meta property="og:title" content="${esc(meta.t)}">
 <meta property="og:description" content="${esc(meta.d)}"><meta property="og:url" content="${url}">
 <meta property="og:locale" content="${lang === 'fa' ? 'fa_IR' : 'en_US'}"><meta property="og:site_name" content="${esc(t.siteName)}">
+<link rel="preconnect" href="https://api.tgju.org" crossorigin><link rel="preconnect" href="https://www.navasan.tech" crossorigin><link rel="preconnect" href="https://api.gold-api.com" crossorigin><link rel="preconnect" href="https://api.frankfurter.dev" crossorigin>
 <link rel="icon" href="${prefix}favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="${prefix}css/style.css">
 <script type="application/ld+json">${JSON.stringify(jsonLd)}</script>${extraHead}</head>
@@ -158,9 +167,10 @@ function shell({ lang, slug, body, extraHead = '' }) {
 <p>${esc(t.disclaimer)}</p>
 <div class="refresh"><button type="button" class="btn" id="refresh-btn">${esc(t.refresh)}</button><span id="refresh-msg" role="status" aria-live="polite"></span></div>
 <nav aria-label="footer"><a href="${navLink('about/')}">${t.nav.about}</a><a href="${navLink('calculator/')}">${t.nav.calculator}</a></nav>
-<script type="application/json" id="i18n-refresh">${JSON.stringify({ refreshing: t.refreshing, upToDate: t.refreshUpToDate, failed: t.refreshFailed, fastUpdated: t.refreshFastUpdated })}</script>
+<script type="application/json" id="i18n-refresh">${JSON.stringify({ refreshing: t.refreshing, upToDate: t.refreshUpToDate, failed: t.refreshFailed, fastUpdated: t.refreshFastUpdated, partial: t.refreshPartial, fresh: t.fresh, stale: t.stale, staleTile: t.tkStaleTitle, liveAt: t.tkLiveAt, lastAt: t.tkLastAt, noTime: t.tkNoTime, srcNames: i18n.srcNames })}</script>
 <script src="${prefix}js/trend.js" defer></script>
-<script src="${prefix}js/refresh.js" defer></script>
+<script type="module" src="${prefix}js/refresh.js"></script>
+<script type="module" src="${prefix}js/live.js"></script>
 </div></footer>
 <div class="statusbar"><div class="wrap sb-in">
 <span class="sb-views">${t.views}: <img class="hits" src="https://hits.sh/fanisani.ir.svg" alt="${t.viewsAlt}" height="16"></span>
@@ -170,13 +180,48 @@ function shell({ lang, slug, body, extraHead = '' }) {
 
 const statusLine = (lang) => {
   const t = i18n[lang];
-  return `<p class="status"><span class="dot ${isFresh ? 'ok' : 'warn'}"></span>${t.status}: ${isFresh ? t.fresh : t.stale} · ${t.lastUpdate}: <span class="num">${fmtTime(data.t, lang)}</span></p>`;
+  return `<p class="status"><span class="dot ${isFresh ? 'ok' : 'warn'}"></span>${t.status}: <span class="st-label">${isFresh ? t.fresh : t.stale}</span> · ${t.lastUpdate}: <span class="num">${fmtTime(data.t, lang)}</span></p>`;
 };
 
 const card = (title, inner) => `<section class="card"><h2>${title}</h2>${inner}</section>`;
 const legend = (lang, items) => `<div class="legend">${items.map(([c, k]) => `<span><i style="background:${c}"></i>${i18n[lang][k]}</span>`).join('')}</div>`;
 
 // --- pages ------------------------------------------------------------------
+// Homepage strip: [code, label key or asset name, unit, decimals]. The value is the
+// same one the table shows (data.a), so first paint matches the live update.
+const TICK = [
+  ['XAU', null], ['BRENT', null], ['USDIRR', null], ['COIN', null],
+  ['TEDPIX', 'tkTedpix', '', 0], ['NASDAQ', 'tkNasdaq', '', 2],
+];
+
+function tickerCard(lang) {
+  const t = i18n[lang];
+  const cls = (x) => (x > 0 ? 'up' : x < 0 ? 'down' : 'flat');
+  const arrow = (x) => (x > 0 ? '&#9650;' : x < 0 ? '&#9660;' : '');
+  const day = (d) => new Intl.DateTimeFormat(LOCALE[lang], { day: 'numeric', month: 'short' }).format(new Date(`${d}T12:00:00Z`));
+  const chg = (x, key) => (Number.isFinite(x)
+    ? `<span class="num ${cls(x)}" data-${key}>${arrow(x)} ${fmtPct(x, lang)}</span>`
+    : `<span class="num" data-${key}>—</span>`);
+  const cards = TICK.map(([code, labelKey, u, dec]) => {
+    const it = ticker.items?.[code] ?? {};
+    const isAsset = Boolean(assets[code]);
+    const label = isAsset ? assets[code][lang] : t[labelKey];
+    const unitTxt = isAsset ? (assets[code]['u_' + lang] ?? '') : u;
+    const d = isAsset ? assets[code].d : dec;
+    const v = Number.isFinite(data.a[code]?.v) ? data.a[code].v : it.v;
+    const asOf = it.d ? `<span data-asof data-label="${esc(t.tkAsOf)}">${esc(t.tkAsOf)} ${esc(day(it.d))}</span>` : '<span data-asof data-label=""></span>';
+    const slugOf = MARKETS.find((m) => m.code === code)?.slug;
+    return `<a class="tick" href="markets/${slugOf}/" data-tick="${code}" data-d="${d}" data-v="${Number.isFinite(v) ? v : ''}" data-bt="${data.t * 1000}">` +
+      `<div class="tk-name">${esc(label)}</div>` +
+      `<div class="tk-v num"><span data-tv>${Number.isFinite(v) ? fmt(v, d, lang) : '—'}</span>${unitTxt ? ` <small class="u">${esc(unitTxt)}</small>` : ''}</div>` +
+      `<div class="tk-ch"><span class="tk-l">${t.tick1d}</span>${chg(it.c, 'c')}</div>` +
+      `<div class="tk-ch"><span class="tk-l">${t.tick1w}</span>${chg(it.w, 'w')}</div>` +
+      `<div class="tk-src">${asOf}</div>` +
+      `</a>`;
+  }).join('');
+  return card(t.tickerTitle, `<div class="tick-grid">${cards}</div><p class="ticker-note">${esc(t.tickNote)}</p><p class="ticker-note">${esc(t.tkStaleNote)}</p>`);
+}
+
 function homeBody(lang) {
   const t = i18n[lang];
   const trend = trendCard({
@@ -216,6 +261,7 @@ function homeBody(lang) {
   const sources = [...new Set(Object.values(data.s))]
     .map((s) => i18n.srcNames[s]?.[lang] ?? s).join(' · ');
   return `<h1>${esc(t.siteName)}</h1><p class="muted">${t.homeIntro}</p>${statusLine(lang)}
+  ${tickerCard(lang)}
   <div class="grid2">${card(t.globalMarkets, table(G.global, lang))}${card(t.iranMarkets, table(G.iran, lang))}</div>
   ${card(t.goldSection, table(G.gold, lang))}
   ${card(t.impliedDollar, impliedSection(lang))}
@@ -305,7 +351,7 @@ function labBody(lang) {
     w365: { t0: h1y.t0, dt: h1y.dt },
   });
   const opts = labAssets.map((a) => `<option value="${a.code}">${esc(a.name)}</option>`).join('');
-  const tools = [['return', L.tReturn], ['risk', L.tRisk], ['trend', L.tTrend], ['compare', L.tCompare]]
+  const tools = [['return', L.tReturn], ['risk', L.tRisk], ['trend', L.tTrend], ['signal', L.tSignal], ['compare', L.tCompare]]
     .map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
   const extraHead =
     `<script type="application/json" id="i18n-lab">${JSON.stringify(L)}</script>` +
@@ -328,6 +374,185 @@ function labBody(lang) {
   ${card(L.method, `<p><code>${esc(L.mReturn)}</code></p><p><code>${esc(L.mVol)}</code></p><p><code>${esc(L.mDd)}</code></p><p><code>${esc(L.mSma)}</code></p><p><code>${esc(L.mCorr)}</code></p>`)}
   ${card(L.dataCard, `<p>${esc(L.dataNote)}</p><p class="muted">${esc(L.shortWindow)}</p><p class="muted"><strong>${esc(i18n[lang].disclaimer)}</strong> ${esc(L.notAdvice)}</p>`)}`;
   return { body, extraHead };
+}
+
+// --- market pages (one per homepage card) -----------------------------------
+const MK_RANGES = [['7', 'mkR7'], ['30', 'mkR30'], ['90', 'mkR90'], ['365', 'mkR365']];
+const MK_DEFAULT = '30';
+const shiftDay = (ymd, n) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const sliceRange = (series, days) => (series?.length ? series.filter(([d]) => d >= shiftDay(series.at(-1)[0], -days)) : []);
+const pctOf = (now, before) => ((now - before) / before) * 100;
+const dayLabel = (ymd, lang) => new Intl.DateTimeFormat(LOCALE[lang], { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${ymd}T12:00:00Z`));
+
+function marketStats(pts) {
+  if (pts.length < 2) return null;
+  const vals = pts.map((p) => p[1]);
+  return { last: vals.at(-1), change: pctOf(vals.at(-1), vals[0]), high: Math.max(...vals), low: Math.min(...vals), n: vals.length };
+}
+
+// Static chart for the default range (the browser redraws it for other ranges).
+// Only the line lives in the SVG (scaled to any width); axis labels are HTML so
+// they keep a readable font size on phones. The block is LTR so the date order
+// matches the line in both languages.
+function marketChart(pts, d, lang, label) {
+  if (pts.length < 2) return `<p class="muted">${esc(i18n[lang].mkNoData)}</p>`;
+  const W = 640, H = 240, PT = 12, PB = 12;
+  const vals = pts.map((p) => p[1]);
+  const min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
+  const x = (i) => (i / (pts.length - 1)) * W;
+  const y = (v) => PT + (1 - (v - min) / span) * (H - PT - PB);
+  const line = pts.map(([, v], i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  return `<div class="mk-chart-wrap" dir="ltr">` +
+    `<div class="mk-yl"><span>${fmt(max, d, lang)}</span><span>${fmt(min, d, lang)}</span></div>` +
+    `<svg class="mk-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(label)}">` +
+    `<polyline fill="none" stroke="#d97706" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke" points="${line}"/></svg>` +
+    `</div>` +
+    `<div class="mk-xl" dir="ltr"><span>${esc(dayLabel(pts[0][0], lang))}</span><span>${esc(dayLabel(pts.at(-1)[0], lang))}</span></div>`;
+}
+
+function marketStatsHtml(st, d, unitTxt, lang) {
+  const t = i18n[lang];
+  if (!st) return '';
+  const chg = `<span class="num ${st.change > 0 ? 'up' : st.change < 0 ? 'down' : 'flat'}">${fmtPct(st.change, lang)}</span>`;
+  return `<dt>${esc(t.mkStatLast)}</dt><dd class="num">${fmt(st.last, d, lang)}${unitTxt ? ` <small class="u">${esc(unitTxt)}</small>` : ''}</dd>` +
+    `<dt>${esc(t.mkStatChange)}</dt><dd>${chg}</dd>` +
+    `<dt>${esc(t.mkStatHigh)}</dt><dd class="num">${fmt(st.high, d, lang)}</dd>` +
+    `<dt>${esc(t.mkStatLow)}</dt><dd class="num">${fmt(st.low, d, lang)}</dd>` +
+    `<dt>${esc(t.mkStatPoints)}</dt><dd class="num">${st.n}</dd>`;
+}
+
+function marketBody(lang, m) {
+  const t = i18n[lang];
+  const isAsset = Boolean(assets[m.code]);
+  const name = isAsset ? assets[m.code][lang] : t[m.name];
+  const unitTxt = isAsset ? (assets[m.code]['u_' + lang] ?? '') : '';
+  const d = m.d;
+  const series = mhist.markets?.[m.slug] ?? [];
+  const pts = sliceRange(series, Number(MK_DEFAULT));
+  const st = marketStats(pts);
+  const it = ticker.items?.[m.code] ?? {};
+  const tableV = data.a[m.code]?.v;
+  const v = Number.isFinite(tableV) ? tableV : (Number.isFinite(it.v) ? it.v : st?.last);
+  const cls = (x) => (x > 0 ? 'up' : x < 0 ? 'down' : 'flat');
+  const arrow = (x) => (x > 0 ? '&#9650;' : x < 0 ? '&#9660;' : '');
+  const chg = (x, key) => (Number.isFinite(x)
+    ? `<span class="num ${cls(x)}" data-${key}>${arrow(x)} ${fmtPct(x, lang)}</span>`
+    : `<span class="num" data-${key}>—</span>`);
+  const asOf = it.d ? `<span data-asof data-label="${esc(t.tkAsOf)}">${esc(t.tkAsOf)} ${esc(dayLabel(it.d, lang))}</span>` : '<span data-asof data-label=""></span>';
+  const head = `<div class="tick mk-head" data-tick="${m.code}" data-d="${d}" data-v="${Number.isFinite(v) ? v : ''}" data-bt="${data.t * 1000}">` +
+    `<div class="tk-name">${esc(name)}</div>` +
+    `<div class="tk-v num"><span data-tv>${Number.isFinite(v) ? fmt(v, d, lang) : '—'}</span>${unitTxt ? ` <small class="u">${esc(unitTxt)}</small>` : ''}</div>` +
+    `<div class="tk-ch"><span class="tk-l">${t.tick1d}</span>${chg(it.c, 'c')}</div>` +
+    `<div class="tk-ch"><span class="tk-l">${t.tick1w}</span>${chg(it.w, 'w')}</div>` +
+    `<div class="tk-src">${asOf}</div></div>`;
+
+  const labels = {
+    ranges: Object.fromEntries(MK_RANGES.map(([days, key]) => [days, t[key]])),
+    statLast: t.mkStatLast, statChange: t.mkStatChange, statHigh: t.mkStatHigh, statLow: t.mkStatLow, statPoints: t.mkStatPoints,
+    live: t.mkLive, build: t.mkBuild, liveFail: t.mkLiveFail, nasdaq: t.mkNasdaqNote, noData: t.mkNoData,
+    up: 'up', down: 'down',
+  };
+  const payload = {
+    slug: m.slug, code: m.code, tgju: m.tgju, scale: m.scale, d, unit: unitTxt,
+    locale: LOCALE[lang], defaultRange: Number(MK_DEFAULT), series, labels,
+  };
+  const statusText = m.tgju ? t.mkBuild : t.mkNasdaqNote;
+  const body = `<p class="mk-back"><a href="../../">← ${esc(t.mkBack)}</a></p>` +
+    `<h1>${esc(name)}</h1>${head}` +
+    `<section class="card mk" aria-labelledby="mk-h"><h2 id="mk-h">${esc(t.mkChart)}</h2>` +
+    `<div class="mk-range" role="group" aria-label="${esc(t.mkRange)}">` +
+    MK_RANGES.map(([days, key]) => `<button type="button" class="mk-btn" data-range="${days}" aria-pressed="${days === MK_DEFAULT}">${esc(t[key])}</button>`).join('') +
+    `</div>` +
+    `<div id="mk-chart">${marketChart(pts, d, lang, `${name} — ${t.mkChart}`)}</div>` +
+    `<p class="mk-status muted" id="mk-status" role="status">${esc(statusText)}</p>` +
+    `<dl class="kv" id="mk-stats">${marketStatsHtml(st, d, unitTxt, lang)}</dl>` +
+    `<noscript><p class="muted">${esc(t.mkNoJs)}</p></noscript>` +
+    `</section>` +
+    `<script type="application/json" id="mk-data">${JSON.stringify(payload).replace(/</g, '\\u003c')}</script>` +
+    marketSectionHtml(lang, m) +
+    card(t.mkAbout, `<p>${esc(t.mkNote)}</p><p class="muted"><strong>${esc(t.disclaimer)}</strong></p>`);
+  return { body, extraHead: `<script type="module" src="${'../'.repeat(3)}js/market.js"></script>` };
+}
+
+// --- market page: full section content ------------------------------------
+// Gold, oil, currency and coin tiles embed the same body as their section page
+// (its H1 is lowered to H3 so the page keeps a single H1). Tedpix and Nasdaq have
+// no section page, so they get an information block computed from the stored history.
+const SECTION_FOR = {
+  'gold-oz': ['gold', () => G.gold, 'XAU', '#d97706'],
+  brent: ['oil', () => G.oil, 'BRENT', '#3b82f6'],
+  usd: ['currency', () => [...G.fxGlobal, ...G.fxIran], 'USDIRR', '#16a34a'],
+  coin: ['iran-gold', () => G.iranGold, 'AU18', '#d97706'],
+};
+
+function indexInfoBody(lang, m) {
+  const t = i18n[lang];
+  const series = mhist.markets?.[m.slug] ?? [];
+  if (series.length < 3) return card(t.idxTitle, `<p class="muted">${esc(t.mkNoData)}</p>`);
+  const vals = series.map((p) => p[1]);
+  const lastD = series.at(-1)[0];
+  const last = vals.at(-1);
+  // Last stored point on or before a date (series is ascending).
+  const valueOn = (ymd) => { let v = null; for (const [d, x] of series) { if (d <= ymd) v = x; else break; } return v; };
+  const chg = (days) => { const b = valueOn(shiftDay(lastD, -days)); return b ? pctOf(last, b) : null; };
+  let hi = series[0], lo = series[0];
+  for (const p of series) { if (p[1] > hi[1]) hi = p; if (p[1] < lo[1]) lo = p; }
+  const spanDays = (Date.parse(`${lastD}T00:00:00Z`) - Date.parse(`${series[0][0]}T00:00:00Z`)) / 864e5;
+  const perYear = (series.length - 1) / (spanDays / 365);
+  const vol = volatility(vals, perYear);
+  const dd = maxDrawdown(vals);
+  const tr = trendSignal(vals, 30);
+  const cls = (x) => (x > 0 ? 'up' : x < 0 ? 'down' : 'flat');
+  const pv = (x) => (Number.isFinite(x) ? `<span class="num ${cls(x)}">${fmtPct(x, lang)}</span>` : '—');
+
+  // Month-end values for the last 12 months, with the change from the previous month end.
+  const [Y, M0] = lastD.split('-').map(Number);
+  // A month only gets a value when the stored series has a point inside it. Months with
+  // no points (e.g. a source gap) show a dash instead of carrying an old value forward.
+  const lastIn = (from, to) => { let v = null; for (const [d, x] of series) { if (d > from && d <= to) v = x; } return v; };
+  const months = [];
+  for (let k = 12; k >= 0; k--) {
+    const monthEnd = new Date(Date.UTC(Y, M0 - k, 0)).toISOString().slice(0, 10);
+    const prevEnd = new Date(Date.UTC(Y, M0 - k - 1, 0)).toISOString().slice(0, 10);
+    const end = monthEnd > lastD ? lastD : monthEnd;
+    months.push({
+      label: new Intl.DateTimeFormat(`${LOCALE[lang]}-u-ca-gregory`, { month: 'long', year: 'numeric' }).format(new Date(`${end}T12:00:00Z`)),
+      v: lastIn(prevEnd, end),
+    });
+  }
+  const monthRows = months.slice(1).map((r, i) => ({ ...r, ch: r.v && months[i].v ? pctOf(r.v, months[i].v) : null }));
+
+  const isTedpix = m.slug === 'tedpix';
+  const kv = `<dl class="kv">` +
+    `<dt>${esc(t.idxLast)}</dt><dd class="num">${fmt(last, m.d, lang)}</dd>` +
+    `<dt>${esc(t.idxChg1m)}</dt><dd>${pv(chg(30))}</dd>` +
+    `<dt>${esc(t.idxChg3m)}</dt><dd>${pv(chg(90))}</dd>` +
+    `<dt>${esc(t.idxChg1y)}</dt><dd>${pv(chg(365))}</dd>` +
+    `<dt>${esc(t.idxHigh)}</dt><dd class="num">${fmt(hi[1], m.d, lang)} <small class="muted">${esc(dayLabel(hi[0], lang))}</small></dd>` +
+    `<dt>${esc(t.idxLow)}</dt><dd class="num">${fmt(lo[1], m.d, lang)} <small class="muted">${esc(dayLabel(lo[0], lang))}</small></dd>` +
+    `<dt>${esc(t.idxFromHigh)}</dt><dd>${pv(pctOf(last, hi[1]))}</dd>` +
+    `<dt>${esc(t.idxMaxDD)}</dt><dd>${dd ? pv(dd.pct) : '—'}</dd>` +
+    `<dt>${esc(t.idxVol)}</dt><dd class="num">${vol ? `${fmt(vol.annualized * 100, 1, lang)}%` : '—'}</dd>` +
+    `<dt>${esc(t.idxSma)}</dt><dd>${tr ? `${pv(tr.vsSmaPct)} · ${esc(tr.direction === 'up' ? t.idxUp : tr.direction === 'down' ? t.idxDown : t.idxFlat)}` : '—'}</dd>` +
+    `<dt>${esc(t.idxSpan)}</dt><dd class="num">${esc(dayLabel(series[0][0], lang))} – ${esc(dayLabel(lastD, lang))}</dd>` +
+    `<dt>${esc(t.idxPoints)}</dt><dd class="num">${series.length}</dd>` +
+    `</dl>`;
+  const tbl = `<div class="tw"><table><thead><tr><th>${esc(t.idxMonth)}</th><th>${esc(t.idxValue)}</th><th>${esc(t.idxMonthChg)}</th></tr></thead><tbody>` +
+    monthRows.map((r) => `<tr><td>${esc(r.label)}</td><td class="num">${r.v === null ? '—' : fmt(r.v, m.d, lang)}</td><td>${pv(r.ch)}</td></tr>`).join('') +
+    `</tbody></table></div>`;
+  return `<section class="mk-section"><h2 class="mk-sec-title">${esc(t.mkFullSection)}</h2>` +
+    card(t.idxTitle, `<p>${esc(isTedpix ? t.idxAboutTedpix : t.idxAboutNasdaq)}</p><p class="muted">${esc(t.idxIntro)}</p>${kv}` +
+      `<h3 class="mk-sub">${esc(t.idxMonthly)}</h3>${tbl}<p class="muted">${esc(isTedpix ? t.idxNoteTedpix : t.idxNoteNasdaq)}</p>`) +
+    `</section>`;
+}
+
+function marketSectionHtml(lang, m) {
+  const t = i18n[lang];
+  const entry = SECTION_FOR[m.slug];
+  if (!entry) return indexInfoBody(lang, m);
+  const [slug, codes, asset, color] = entry;
+  const inner = categoryBody(lang, slug, codes(), asset, color).replace(/<h1>([\s\S]*?)<\/h1>/, '<h3 class="mk-sub">$1</h3>');
+  return `<section class="mk-section"><h2 class="mk-sec-title">${esc(t.mkFullSection)}</h2>${inner}</section>`;
 }
 
 function aboutBody(lang) {
@@ -354,11 +579,20 @@ for (const lang of ['fa', 'en']) {
   }
 }
 
-// Root: language detection redirect
-// Persian-first: the audience is Iranian (.ir domain), so the root always
-// lands on /fa/ regardless of browser locale; English stays reachable via
-// the header switcher and the noscript fallback links.
-writeFileSync(path.join(PUB, 'index.html'), `<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><title>رصد بازار | Market Radar</title><script>location.replace('fa/')</script><meta http-equiv="refresh" content="0;url=fa/"><link rel="canonical" href="${SITE_URL}/"></head><body><noscript><a href="fa/">فارسی</a> · <a href="en/">English</a></noscript></body></html>`);
+for (const lang of ['fa', 'en']) {
+  for (const m of MARKETS) {
+    const dir = path.join(PUB, lang, 'markets', m.slug);
+    mkdirSync(dir, { recursive: true });
+    const { body, extraHead } = marketBody(lang, m);
+    writeFileSync(path.join(dir, 'index.html'), shell({ lang, slug: `markets/${m.slug}`, body, extraHead }));
+  }
+}
+
+// Root: default-language redirect.
+// English is the default: the root always lands on /en/ regardless of browser
+// locale; Persian stays reachable via the header switcher and the noscript
+// fallback links.
+writeFileSync(path.join(PUB, 'index.html'), `<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8"><title>Market Radar | رصد بازار</title><script>location.replace('en/')</script><meta http-equiv="refresh" content="0;url=en/"><link rel="canonical" href="${SITE_URL}/"></head><body><noscript><a href="en/">English</a> · <a href="fa/">فارسی</a></noscript></body></html>`);
 
 // 404: redirect home
 writeFileSync(path.join(PUB, '404.html'), `<!doctype html><html><head><meta charset="utf-8"><script>location.replace('./')</script><meta http-equiv="refresh" content="0;url=./"></head><body></body></html>`);
@@ -372,6 +606,10 @@ copyFileSync(path.join(root, 'src/calc.js'), path.join(PUB, 'js/calc.js'));
 copyFileSync(path.join(root, 'src/app.js'), path.join(PUB, 'js/app.js'));
 copyFileSync(path.join(root, 'src/trend.js'), path.join(PUB, 'js/trend.js'));
 copyFileSync(path.join(root, 'src/refresh.js'), path.join(PUB, 'js/refresh.js'));
+copyFileSync(path.join(root, 'src/live.js'), path.join(PUB, 'js/live.js'));
+copyFileSync(path.join(root, 'src/live-parse.js'), path.join(PUB, 'js/live-parse.js'));
+copyFileSync(path.join(root, 'src/market.js'), path.join(PUB, 'js/market.js'));
+copyFileSync(path.join(root, 'src/stale.js'), path.join(PUB, 'js/stale.js'));
 copyFileSync(path.join(root, 'src/lab.js'), path.join(PUB, 'js/lab.js'));
 copyFileSync(path.join(root, 'src/lab-calc.js'), path.join(PUB, 'js/lab-calc.js'));
 copyFileSync(path.join(root, 'src/favicon.svg'), path.join(PUB, 'favicon.svg'));
@@ -382,7 +620,7 @@ for (const f of ['current.json', 'history-7d.json', 'history-30d.json', 'history
 writeFileSync(path.join(PUB, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${SITE_URL || ''}/sitemap.xml\n`);
 writeFileSync(path.join(PUB, 'sitemap.xml'),
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` +
-  ['fa', 'en'].flatMap((lang) => ['', 'gold/', 'currency/', 'oil/', 'iran-gold/', 'lab/', 'calculator/', 'about/']
+  ['fa', 'en'].flatMap((lang) => ['', 'gold/', 'currency/', 'oil/', 'iran-gold/', 'lab/', 'calculator/', 'about/', ...MARKETS.map((m) => `markets/${m.slug}/`)]
     .map((s) => `<url><loc>${SITE_URL}/${lang}/${s}</loc><lastmod>${new Date(data.t * 1000).toISOString()}</lastmod></url>`)).join('') +
   `</urlset>\n`);
 

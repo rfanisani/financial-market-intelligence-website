@@ -1,0 +1,8 @@
+[
+  { "slug": "gold-oz", "code": "XAU", "tgju": "ons", "scale": 1, "pctOnly": true, "d": 2, "name": "asset" },
+  { "slug": "brent", "code": "BRENT", "tgju": "oil_brent", "scale": 1, "d": 2, "name": "asset" },
+  { "slug": "usd", "code": "USDIRR", "tgju": "price_dollar_rl", "scale": 0.1, "d": 0, "name": "asset" },
+  { "slug": "coin", "code": "COIN", "tgju": "sekee", "scale": 0.1, "d": 0, "name": "asset" },
+  { "slug": "tedpix", "code": "TEDPIX", "tgju": "bourse", "scale": 1, "d": 0, "name": "tkTedpix" },
+  { "slug": "nasdaq", "code": "NASDAQ", "tgju": null, "yahoo": "%5EIXIC", "scale": 1, "d": 2, "name": "tkNasdaq" }
+]

@@ -9,9 +9,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 import path from 'node:path';
 import { validateCurrent, validateHistory } from '../src/validate.js';
+import { parseTgjuSeries, parseTgjuHistory, parseYahooChart, parseYahooSeries } from '../src/live-parse.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CURRENT = path.join(root, 'data/current.json');
+const TICKER = path.join(root, 'data/ticker.json');
 const TIMEOUT = 15000;
 
 async function getJson(url) {
@@ -118,7 +120,7 @@ async function providerTgju() {
   const out = {};
   for (const [code, sym] of Object.entries(symbols)) {
     try {
-      const j = await getJson(`https://api.tgju.org/v1/market/indicator/summary-table-data/${sym}?row=1`);
+      const j = await getJson(`https://api.tgju.org/v1/market/indicator/summary-table-data/${sym}?length=1`);
       const row = j.data?.[0];
       if (!Array.isArray(row)) continue;
       const rial = Number(String(row[0]).replace(/,/g, ''));
@@ -129,6 +131,62 @@ async function providerTgju() {
     } catch { /* single asset failure keeps last good value */ }
   }
   return out;
+}
+
+// --- Market strip and market pages -----------------------------------------
+// One request per market feeds both: the latest quote with its 1-day and
+// 1-week change (homepage strip) and about one year of daily history (market
+// pages). Symbols live in src/markets.json, shared with the build and the browser.
+// For XAU only the change % is taken from TGJU (pctOnly); the price stays on gold-api.
+const MARKETS = JSON.parse(readFileSync(path.join(root, 'src/markets.json'), 'utf8'));
+const MARKET_HISTORY = path.join(root, 'data/market-history.json');
+const HISTORY_DAYS = 370;
+
+const cutoffDate = (days) => new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+
+async function getYahoo(sym) {
+  for (const host of ['query1', 'query2']) {
+    try {
+      return await getJson(`https://${host}.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1y`);
+    } catch (err) {
+      console.warn(`[fetch] Yahoo ${sym} (${host}) failed: ${err.message}`);
+    }
+  }
+  throw new Error(`Yahoo ${sym} unavailable`);
+}
+
+async function fetchTicker(prev, prevHistory) {
+  const items = {};
+  const markets = { ...(prevHistory?.markets ?? {}) };
+  const cutoff = cutoffDate(HISTORY_DAYS);
+  await Promise.all(MARKETS.map(async (m) => {
+    try {
+      let quote, hist;
+      if (m.tgju) {
+        const j = await getJson(`https://api.tgju.org/v1/market/indicator/summary-table-data/${m.tgju}?length=400`);
+        quote = parseTgjuSeries(j, m.code, m.scale)[m.code];
+        hist = parseTgjuHistory(j, m.scale);
+      } else {
+        const j = await getYahoo(m.yahoo);
+        quote = parseYahooChart(j, m.code)[m.code];
+        hist = parseYahooSeries(j);
+      }
+      if (quote) {
+        items[m.code] = { ...quote, ...(m.pctOnly ? { v: undefined } : {}), s: m.tgju ? 'tgju' : 'yahoo' };
+      }
+      const kept = hist.filter(([d]) => d >= cutoff);
+      if (kept.length > 1) markets[m.slug] = kept;
+    } catch (err) {
+      console.warn(`[fetch] market ${m.slug} failed: ${err.message}`);
+    }
+  }));
+
+  // Keep the last good value for anything that failed this time.
+  for (const m of MARKETS) {
+    items[m.code] = items[m.code] ?? prev?.items?.[m.code] ?? null;
+  }
+  const t = Math.floor(Date.now() / 1000);
+  return { ticker: { t, items }, history: { t, markets } };
 }
 
 // --- Merge + validate -------------------------------------------------------
@@ -225,6 +283,20 @@ if (isMain) {
   writeFileSync(CURRENT, JSON.stringify(next));
   console.log(`[fetch] wrote ${Object.keys(updates).length} updated / ${Object.keys(next.a).length} total assets at ${now}`);
   if (failures > 0) console.warn(`[fetch] ${failures} provider(s) failed; mixed sources recorded per asset`);
+
+  try {
+    let prevTicker = null, prevHistory = null;
+    try { prevTicker = JSON.parse(readFileSync(TICKER, 'utf8')); } catch {}
+    try { prevHistory = JSON.parse(readFileSync(MARKET_HISTORY, 'utf8')); } catch {}
+    const { ticker, history } = await fetchTicker(prevTicker, prevHistory);
+    const got = Object.values(ticker.items).filter(Boolean).length;
+    const nSeries = Object.keys(history.markets).length;
+    writeFileSync(TICKER, JSON.stringify(ticker));
+    writeFileSync(MARKET_HISTORY, JSON.stringify(history));
+    console.log(`[fetch] wrote market strip: ${got}/${MARKETS.length} quotes, ${nSeries}/${MARKETS.length} histories`);
+  } catch (e) {
+    console.warn(`[fetch] market strip failed: ${e.message} (keeping last-known-good strip)`);
+  }
 
   try {
     await fetchHistoricalData(now);
