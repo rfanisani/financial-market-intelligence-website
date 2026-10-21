@@ -9,10 +9,11 @@ import path from 'node:path';
 import {
   OUNCE_GRAMS, usdPerGram, gold18UsdPerGram, gold24UsdPerGram,
   impliedUsd, difference, expectedDomesticPrice,
+  olsFit, solveLinear, usdRelationFit, relationFair, relationSignal, relationBacktest,
 } from '../src/calc.js';
 import {
   simpleReturns, periodReturn, volatility, maxDrawdown,
-  sma, trendSignal, normalize, correlation, compareAssets,
+  sma, trendSignal, normalize, correlation, compareAssets, resolveWindow, LAB_WINDOWS, signalBacktest,
 } from '../src/lab-calc.js';
 import { validateCurrent, validateHistory } from '../src/validate.js';
 import { providerNavasan } from './fetch-data.mjs';
@@ -289,6 +290,50 @@ test('lab: trend signal classifies latest price vs its moving average', () => {
   assert.equal(trendSignal([100, 120], 5), null); // window > length
 });
 
+test('lab: window selector maps 7/30/365 exactly (1 year must not fall back to 7 days)', () => {
+  assert.deepEqual([...LAB_WINDOWS], [7, 30, 365]);
+  assert.equal(resolveWindow('365'), 365);
+  assert.equal(resolveWindow(365), 365);
+  assert.equal(resolveWindow('30'), 30);
+  assert.equal(resolveWindow('7'), 7);
+  assert.equal(resolveWindow('14'), 7);   // unsupported -> default
+  assert.equal(resolveWindow(''), 7);
+  assert.equal(resolveWindow(undefined), 7);
+});
+
+test('lab signal: buy/sell signals, trades and returns match a hand-worked example', () => {
+  // SMA3 on [10,11,12,11,9,8,9,12,13,12,10]: first valid day is index 2.
+  const r = signalBacktest([10, 11, 12, 11, 9, 8, 9, 12, 13, 12, 10], 3);
+  assert.deepEqual(r.signals, [
+    { i: 2, type: 'buy' }, { i: 3, type: 'sell' }, { i: 6, type: 'buy' }, { i: 9, type: 'sell' },
+  ]);
+  assert.equal(r.closedCount, 2);
+  assert.equal(r.wins, 1);
+  assert.equal(r.winRate, 50);
+  assert.ok(Math.abs(r.trades[0].retPct - (-8.3333)) < 1e-3);
+  assert.ok(Math.abs(r.trades[1].retPct - 33.3333) < 1e-3);
+  assert.ok(Math.abs(r.strategyPct - 22.2222) < 1e-3);   // only in the market: 2->3, 6->9
+  assert.ok(Math.abs(r.buyHoldPct - (-16.6667)) < 1e-3);
+  assert.equal(r.hitLong.n, 4);
+  assert.equal(r.hitLong.hits, 2);
+  assert.equal(r.current.inMarket, false);
+  assert.equal(r.openPosition, false);
+});
+
+test('lab signal: open position at window end is reported but excluded from win rate', () => {
+  const r = signalBacktest([10, 11, 12, 13, 14, 15, 16], 3);   // always above the average
+  assert.equal(r.openPosition, true);
+  assert.equal(r.closedCount, 0);
+  assert.equal(r.winRate, null);
+  assert.equal(r.current.inMarket, true);
+  assert.equal(r.signals.length, 1);
+});
+
+test('lab signal: rejects windows that leave too little data', () => {
+  assert.equal(signalBacktest([1, 2, 3], 3), null);
+  assert.equal(signalBacktest([1, 2, 3, 4, 5], 0), null);
+});
+
 test('lab: normalize rebases a series to 100 at the first point', () => {
   assert.deepEqual(normalize([50, 100, 25]), [100, 200, 50]);
   assert.equal(normalize([1]), null);
@@ -372,6 +417,16 @@ test('lab is integrated into navigation and language switching preserves the des
   const faGold = readFileSync(path.join(PUB, 'fa/gold/index.html'), 'utf8');
   assert.ok(faGold.includes('href="../lab/"'), 'fa gold: lab tab stays inside /fa/');
   assert.ok(!faGold.includes('href="../../lab/"'), 'fa gold: no root-escaping lab link');
+});
+
+test('root redirects default to English (/en/) with Persian as fallback link', () => {
+  const html = readFileSync(path.join(PUB, 'index.html'), 'utf8');
+  assert.ok(html.includes("location.replace('en/')"), 'root JS redirect to en/');
+  assert.ok(html.includes('content="0;url=en/"'), 'root meta refresh to en/');
+  assert.ok(html.includes('lang="en"'), 'root html lang is en');
+  assert.ok(html.includes('href="fa/"'), 'root keeps a Persian fallback link');
+  const app = readFileSync(path.join(root, 'app/page.tsx'), 'utf8');
+  assert.ok(app.includes("redirect('/en/index.html')"), 'next preview route redirects to /en/');
 });
 
 test('sitemap includes the lab routes and robots still allows them', () => {
@@ -459,6 +514,149 @@ test('history: validation rejects malformed structures, negative prices and exce
   assert.equal(validateHistory({ t0: 100, dt: 86400, a: { XAU: new Array(401).fill(10) } }, { maxPoints: 400 }).ok, false);
 });
 
+// --- Live (per-visit) browser providers ------------------------------------------
+import {
+  parseGoldApiPrice, parseFrankfurter, parseTgjuRow, parseNavasanJsonp, decodeJsString,
+  parseTgjuSeries, parseYahooChart,
+} from '../src/live-parse.js';
+
+test('live: navasan JSONP parsed in the browser matches the Node pipeline exactly', async () => {
+  const fixture = navasanWireFixture();
+  const browser = parseNavasanJsonp(fixture);
+  const node = await withMockFetch(fixture, providerNavasan);
+  assert.deepEqual(browser, node);
+  assert.equal(browser.USDIRR.v, 266790);
+  assert.equal(browser.AU24, undefined);
+});
+
+test('live: JS string decoder handles the escapes PHP/JS produce', () => {
+  assert.equal(decodeJsString(String.raw`a\\b`), 'a\\b');   // \\ -> \
+  assert.equal(decodeJsString(String.raw`it\'s`), "it's");       // \' -> '
+  assert.equal(decodeJsString(String.raw`a\/b`), 'a/b');
+  assert.equal(decodeJsString(String.raw`\u06cc`), 'ی');
+  assert.equal(decodeJsString(String.raw`\x41`), 'A');
+  assert.equal(decodeJsString('bad\\'), null);                  // dangling escape
+  assert.equal(decodeJsString(String.raw`\uZZZZ`), null);       // malformed unicode escape
+});
+
+test('live: navasan parser refuses anything that is not the expected wrapper', () => {
+  assert.deepEqual(parseNavasanJsonp('alert(1)'), {});
+  assert.deepEqual(parseNavasanJsonp('navasanret(42);'), {});
+  assert.deepEqual(parseNavasanJsonp("navasanret('not json');"), {});
+});
+
+test('live: gold-api, frankfurter and tgju parsers (values, rejects bad input)', () => {
+  assert.deepEqual(parseGoldApiPrice({ price: 4164.4 }, 'XAU'), { XAU: { v: 4164.4 } });
+  assert.deepEqual(parseGoldApiPrice({ price: -1 }, 'XAU'), {});
+  assert.deepEqual(parseGoldApiPrice({ error: 'Symbol not found' }, 'BRENT'), {});
+
+  const fx = parseFrankfurter({ rates: { EUR: 0.5, GBP: 0.25, JPY: 158 } });
+  assert.equal(fx.EURUSD.v, 2);
+  assert.equal(fx.GBPUSD.v, 4);
+  assert.equal(fx.USDJPY.v, 158);
+  assert.deepEqual(parseFrankfurter({ rates: { EUR: 0 } }), {});
+
+  const row = ['2,641,050', '2,616,000', '2,651,000', '2,626,000', '', '<span class="up">1.29%</span>', '', ''];
+  assert.deepEqual(parseTgjuRow({ data: [row] }, 'USDIRR'), { USDIRR: { v: 264105, c: 1.29 } });
+  assert.deepEqual(parseTgjuRow({ data: [] }, 'USDIRR'), {});
+});
+
+test('live: browser module is data-only (no eval, no dynamic code) and runs on every page load', () => {
+  const live = readFileSync(path.join(root, 'src/live.js'), 'utf8');
+  const parse = readFileSync(path.join(root, 'src/live-parse.js'), 'utf8');
+  for (const src of [live, parse]) {
+    assert.ok(!/\beval\s*\(|new Function\s*\(|vm\./.test(src), 'no code execution of remote payloads');
+  }
+  assert.ok(live.includes('requestIdleCallback') && live.includes('setTimeout'), 'starts after paint');
+  assert.ok(live.includes("cache: 'no-store'"), 'bypasses caches on every visit');
+  assert.ok(live.includes('AbortSignal.timeout'), 'bounded wait per provider');
+  const refresh = readFileSync(path.join(root, 'src/refresh.js'), 'utf8');
+  assert.ok(refresh.includes("'market:live'") && refresh.includes("from './calc.js'"), 'refresh applies live values with shared formulas');
+});
+
+test('live: TGJU is requested with length=8 (row=1 is ignored upstream and returns the full history)', () => {
+  const live = readFileSync(path.join(root, 'src/live.js'), 'utf8');
+  const fetchData = readFileSync(path.join(root, 'scripts/fetch-data.mjs'), 'utf8');
+  assert.ok(live.includes('?length=8'), 'live: length=8');
+  assert.ok(!/summary-table-data\/[^`'"]*\?row=1/.test(live), 'live: no row=1');
+  assert.ok(!/summary-table-data\/\$\{sym\}\?row=1/.test(fetchData), 'fetch-data: no row=1');
+  assert.ok(fetchData.includes('?length=1'), 'fetch-data: length=1');
+});
+
+test('ticker: TGJU series gives latest quote, 1-day and 1-week change (newest row first)', () => {
+  const row = (v, pct, d) => [v, '', '', '', '', pct, d, ''];
+  const j = { data: [
+    row('4,169.51', '0.08%', '2026/10/16'),
+    row('4,099.45', '1.72%', '2026/10/15'),
+    row('4,158.02', '<span class="high">1.42%</span>', '2026/10/14'),
+    row('4,000', '0', '2026/10/09'),          // exactly 7 days before 16 Oct
+    row('3,990', '0', '2026/10/08'),
+  ] };
+  const r = parseTgjuSeries(j, 'XAU', 1).XAU;
+  assert.equal(r.v, 4169.51);
+  assert.equal(r.c, 0.08);
+  assert.ok(Math.abs(r.w - ((4169.51 / 4000 - 1) * 100)) < 1e-9);
+  assert.equal(r.d, '2026-10-16');
+  // Rial to toman, and a quote with a tag-wrapped percent and no usable week reference.
+  const c = parseTgjuSeries({ data: [['2,699,200,000', '', '', '', '', '1.06%', '2026/10/15', '']] }, 'COIN', 0.1).COIN;
+  assert.equal(c.v, 269920000);
+  assert.equal(c.c, 1.06);
+  assert.equal(c.w, undefined);
+  // Rejects unusable input without throwing.
+  assert.deepEqual(parseTgjuSeries({ data: [] }, 'X'), {});
+  assert.deepEqual(parseTgjuSeries(null, 'X'), {});
+  assert.deepEqual(parseTgjuSeries({ data: [['abc', '', '', '', '', '1%', '2026/10/15', '']] }, 'X'), {});
+});
+
+test('ticker: Yahoo chart gives last close, 1-day and 1-week change, skipping null closes', () => {
+  // Five trading days ending 16 Oct 2026 (UTC midnights), one null close.
+  const day = (iso) => Math.floor(Date.parse(`${iso}T00:00:00Z`) / 1000);
+  const j = { chart: { result: [{
+    timestamp: [day('2026-10-09'), day('2026-10-12'), day('2026-10-13'), day('2026-10-14'), day('2026-10-15'), day('2026-10-16')],
+    indicators: { quote: [{ close: [100, 102, null, 104, 105, 110] }] },
+  }] } };
+  const r = parseYahooChart(j, 'NASDAQ').NASDAQ;
+  assert.equal(r.v, 110);
+  assert.ok(Math.abs(r.c - ((110 / 105 - 1) * 100)) < 1e-9);
+  assert.ok(Math.abs(r.w - 10) < 1e-9);   // vs 100 on 9 Oct, exactly 7 days back
+  assert.deepEqual(parseYahooChart({}, 'NASDAQ'), {});
+});
+
+test('ticker: homepage strip renders all six items with change cells the live update can reach', () => {
+  const html = readFileSync(path.join(root, 'public/en/index.html'), 'utf8');
+  for (const code of ['XAU', 'BRENT', 'USDIRR', 'COIN', 'TEDPIX', 'NASDAQ']) {
+    assert.ok(html.includes(`data-tick="${code}"`), `strip: ${code}`);
+  }
+  assert.equal((html.match(/data-tick="/g) || []).length, 6);
+  assert.equal((html.match(/data-c>/g) || []).length, 6, '1-day cells');
+  assert.equal((html.match(/data-w>/g) || []).length, 6, '1-week cells');
+  const refresh = readFileSync(path.join(root, 'src/refresh.js'), 'utf8');
+  assert.ok(refresh.includes('updateTicker(view'), 'refresh applies the strip on every live round');
+});
+
+test('live: progressive rounds, one at a time, bounded per source, with a manual cooldown', () => {
+  const live = readFileSync(path.join(root, 'src/live.js'), 'utf8');
+  assert.ok(live.includes('if (inFlight) return inFlight'), 'one round at a time');
+  assert.ok(live.includes('COOLDOWN_MS = 3000'), 'manual cooldown');
+  assert.ok(live.includes("final: false") && live.includes("final: true"), 'partial and final events');
+  assert.ok(live.includes("'gold-api': 10000"), 'gold-api timeout is 10 s');
+  assert.ok(live.includes('const ATTEMPTS = 3') && live.includes('retryUntil(ATTEMPTS'), 'every source is retried up to 3 times');
+});
+
+test('live: every page loads live.js as a module and implied-USD rows are addressable', () => {
+  for (const f of listHtml(PUB)) {
+    const rel = path.relative(PUB, f);
+    if (rel === 'index.html' || rel === '404.html') continue;
+    const html = readFileSync(f, 'utf8');
+    assert.ok(html.includes('<script type="module" src="') && html.includes('js/live.js"'), `${rel}: live.js`);
+    assert.ok(html.includes('id="i18n-refresh"') && html.includes('"srcNames"'), `${rel}: refresh i18n carries source names`);
+    if (html.includes('class="status"')) assert.ok(html.includes('class="st-label"'), `${rel}: status label is updatable`);
+  }
+  const home = readFileSync(path.join(PUB, 'en/index.html'), 'utf8');
+  for (const k of ['actual', 'ai18', 'icoin']) assert.ok(home.includes(`data-implied="${k}"`), `implied row ${k}`);
+  assert.ok(home.includes('data-v="') && home.includes('data-d="'), 'asset rows carry raw value and decimals');
+});
+
 test('no secrets or development artifacts leak into the production output', () => {
   const chunks = listHtml(PUB).map((p) => readFileSync(p, 'utf8'));
   for (const f of ['js/lab.js', 'js/lab-calc.js', 'js/app.js', 'js/calc.js', 'js/trend.js', 'js/refresh.js', 'css/style.css']) {
@@ -468,4 +666,331 @@ test('no secrets or development artifacts leak into the production output', () =
   for (const pat of [/api[_-]?key/i, /\bsecret\b/i, /\bpassword\b/i, /bearer\s+[a-z0-9._-]+/i, /\btoken\s*[:=]/i, /process\.env/i, /localhost/i, /127\.0\.0\.1/]) {
     assert.ok(!pat.test(all), `production output must not match ${pat}`);
   }
+});
+
+// ---- market detail pages (Follow-up 7) ------------------------------------
+const MARKET_SLUGS = ['gold-oz', 'brent', 'usd', 'coin', 'tedpix', 'nasdaq'];
+const hrefs = (html) => [...html.matchAll(/(?:href|src)="([^"]*)"/g)].map((m) => m[1]);
+// Resolve a relative href/src against the page's own directory (root-relative and absolute URLs are skipped).
+const resolveLocal = (pageRel, ref) => {
+  if (!ref || /^(https?:|mailto:|#|data:|\/\/)/.test(ref)) return null;
+  const base = path.posix.dirname(pageRel);
+  const abs = ref.startsWith('/') ? ref.slice(1) : path.posix.normalize(path.posix.join(base, ref));
+  return abs.replace(/\/$/, '') || '.';
+};
+
+test('markets: six detail pages per language exist and carry the chart, ranges and data payload', () => {
+  for (const lang of ['en', 'fa']) {
+    for (const slug of MARKET_SLUGS) {
+      const rel = `${lang}/markets/${slug}/index.html`;
+      const f = path.join(PUB, rel);
+      assert.ok(existsSync(f), `${rel} exists`);
+      const html = readFileSync(f, 'utf8');
+      assert.ok(html.includes('id="mk-chart"') && html.includes('id="mk-stats"') && html.includes('id="mk-status"'), `${rel}: chart, stats and status regions`);
+      for (const days of ['7', '30', '90', '365']) assert.ok(html.includes(`data-range="${days}"`), `${rel}: range ${days}`);
+      assert.ok(html.includes('aria-pressed="true"') && html.includes('class="mk-btn"'), `${rel}: range buttons carry aria-pressed`);
+      const m = /<script type="application\/json" id="mk-data">([\s\S]*?)<\/script>/.exec(html);
+      assert.ok(m, `${rel}: embedded data payload`);
+      const data = JSON.parse(m[1]);
+      assert.equal(data.slug, slug, `${rel}: payload slug`);
+      assert.ok(Array.isArray(data.series) && data.series.length > 0, `${rel}: payload has history`);
+      assert.ok(data.series.every(([d, v]) => /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(v)), `${rel}: series rows are [date, value]`);
+      assert.ok(html.includes('<svg') && html.includes('<polyline'), `${rel}: static SVG chart present without JS`);
+    }
+  }
+});
+
+test('markets: a market page is not a 404-prone shell: its own nav, language switch and assets resolve from nested depth', () => {
+  for (const lang of ['en', 'fa']) {
+    for (const slug of MARKET_SLUGS) {
+      const rel = `${lang}/markets/${slug}/index.html`;
+      const html = readFileSync(path.join(PUB, rel), 'utf8');
+      const refs = hrefs(html).map((r) => resolveLocal(rel, r)).filter(Boolean);
+      assert.ok(refs.length > 0, `${rel}: has local links`);
+      for (const target of refs) {
+        const ok = existsSync(path.join(PUB, target)) || existsSync(path.join(PUB, target, 'index.html'));
+        assert.ok(ok, `${rel}: local ref resolves to an existing file: ${target}`);
+      }
+      assert.ok(html.includes('../../about/') || html.includes('../../../en/about/'), `${rel}: nav reaches about from depth 3`);
+      assert.ok(html.includes(`../../../${lang === 'en' ? 'fa' : 'en'}/markets/${slug}/`), `${rel}: language switch keeps the same market`);
+      assert.ok(html.includes('../../../js/market.js'), `${rel}: loads js/market.js from the root`);
+      assert.ok(html.includes('../../../css/style.css'), `${rel}: stylesheet from the root`);
+      assert.ok(html.includes('../../../js/live.js'), `${rel}: live.js from the root`);
+    }
+  }
+  assert.ok(existsSync(path.join(PUB, 'js/market.js')), 'js/market.js is copied to public');
+});
+
+test('markets: homepage tiles link to their own detail page in each language', () => {
+  for (const lang of ['en', 'fa']) {
+    const html = readFileSync(path.join(PUB, `${lang}/index.html`), 'utf8');
+    const tiles = [...html.matchAll(/<a class="tick" href="([^"]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(tiles, MARKET_SLUGS.map((s) => `markets/${s}/`), `${lang}: six tiles, each linking to its page`);
+    for (const h of tiles) assert.ok(existsSync(path.join(PUB, lang, h, 'index.html')), `${lang}: ${h} exists`);
+  }
+});
+
+test('markets: sitemap lists every market page in both languages', () => {
+  const sm = readFileSync(path.join(PUB, 'sitemap.xml'), 'utf8');
+  for (const lang of ['en', 'fa']) for (const slug of MARKET_SLUGS) {
+    assert.ok(sm.includes(`/${lang}/markets/${slug}/`), `sitemap has ${lang}/markets/${slug}/`);
+  }
+});
+
+test('markets: live refresh asks TGJU for the latest row only, never a year of history', () => {
+  const src = readFileSync(path.join(root, 'src/market.js'), 'utf8');
+  assert.ok(src.includes('?length=8'), 'latest-row request');
+  assert.ok(!/length=(2\d\d|3\d\d|4\d\d)/.test(src), 'no long-history request in the browser');
+  const markets = JSON.parse(readFileSync(path.join(root, 'src/markets.json'), 'utf8'));
+  const nasdaq = markets.find((m) => m.slug === 'nasdaq');
+  assert.ok(nasdaq && !nasdaq.tgju, 'NASDAQ has no browser TGJU symbol (build-only)');
+});
+
+test('markets: market.js falls back to build data and keeps a valid default range', () => {
+  const src = readFileSync(path.join(root, 'src/market.js'), 'utf8');
+  assert.ok(src.includes('L.liveFail'), 'failure message shown');
+  assert.ok(src.includes("data-range") || src.includes('dataset.range'), 'range buttons wired');
+  assert.ok(src.includes('series = [...series, latest]'), 'newer point appended');
+});
+
+// ---- full section content on market pages and Lab regimes ------------------
+import { smaRegimes } from '../src/lab-calc.js';
+
+test('lab: moving-average regimes match a hand-checked series', () => {
+  // SMA3 of [10,11,12,11,10,9,10,11,12,13]: above, below, below, below, above, above, above, above
+  const r = smaRegimes([10, 11, 12, 11, 10, 9, 10, 11, 12, 13], 3);
+  assert.equal(r.n, 8);
+  assert.equal(r.aboveDays, 5);
+  assert.equal(r.belowDays, 3);
+  assert.ok(Math.abs(r.abovePct - 62.5) < 1e-9);
+  assert.deepEqual(r.above, { runs: 1, avg: 1, max: 1 });   // one finished 1-point stretch above
+  assert.deepEqual(r.below, { runs: 1, avg: 3, max: 3 });   // one finished 3-point stretch below
+  assert.deepEqual(r.current, { side: 'above', len: 4 });   // open stretch at the end is not counted as finished
+});
+
+test('lab: regimes handle a series that never crosses its average and bad input', () => {
+  const rising = smaRegimes([1, 2, 3, 4, 5, 6, 7, 8], 2);
+  assert.equal(rising.below.runs, 0);
+  assert.equal(rising.below.avg, null);
+  assert.equal(rising.above.runs, 0);
+  assert.deepEqual(rising.current, { side: 'above', len: 7 });
+  assert.equal(smaRegimes([1, 2], 5), null);
+  assert.equal(smaRegimes(null, 3), null);
+});
+
+test('lab: regime card and labels are present in the lab page (fa and en)', () => {
+  for (const lang of ['en', 'fa']) {
+    const html = readFileSync(path.join(PUB, `${lang}/lab/index.html`), 'utf8');
+    for (const k of ['regimeTitle', 'regimeAbove', 'regimeBelow', 'regimeRunAbove', 'regimeRunBelow', 'regimeStretch', 'regimeNote']) {
+      assert.ok(html.includes(`"${k}"`), `${lang} lab: label ${k}`);
+    }
+  }
+  const js = readFileSync(path.join(root, 'src/lab.js'), 'utf8');
+  assert.ok(js.includes('regimeCard(a, req)') && js.includes('a.s365'), 'regime card uses the 1-year series');
+});
+
+test('markets: each market page has one H1, unique element ids and the full section', () => {
+  const expect = { 'gold-oz': 'gold', brent: 'oil', usd: 'currency', coin: 'iran-gold' };
+  for (const lang of ['en', 'fa']) {
+    for (const slug of MARKET_SLUGS) {
+      const rel = `${lang}/markets/${slug}/index.html`;
+      const html = readFileSync(path.join(PUB, rel), 'utf8');
+      assert.equal((html.match(/<h1[\s>]/g) || []).length, 1, `${rel}: exactly one H1`);
+      const ids = [...html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
+      const dup = ids.filter((x, i) => ids.indexOf(x) !== i);
+      assert.deepEqual([...new Set(dup)], [], `${rel}: duplicate ids`);
+      assert.ok(html.includes('class="mk-section"'), `${rel}: full-section block`);
+      if (expect[slug]) {
+        // The section body is the same markup as the section page (minus its H1).
+        const sec = readFileSync(path.join(PUB, `${lang}/${expect[slug]}/index.html`), 'utf8');
+        const trendMarker = sec.includes('class="trend') ? 'class="trend' : null;
+        if (trendMarker) assert.ok(html.includes(trendMarker), `${rel}: section trend card is embedded`);
+        const priceCardTitle = (sec.match(/<section class="card"><h2>([^<]+)<\/h2>/) || [])[1];
+        assert.ok(priceCardTitle && html.includes(priceCardTitle), `${rel}: section card "${priceCardTitle}" embedded`);
+      } else {
+        assert.ok(html.includes('class="tw"') && html.includes('<table'), `${rel}: monthly table`);
+        assert.ok(html.includes('class="kv"'), `${rel}: key-value stats`);
+      }
+    }
+  }
+});
+
+test('markets: TEDPIX and Nasdaq info block is computed from the stored history, not fetched', () => {
+  for (const lang of ['en', 'fa']) {
+    for (const slug of ['tedpix', 'nasdaq']) {
+      const html = readFileSync(path.join(PUB, `${lang}/markets/${slug}/index.html`), 'utf8');
+      assert.ok(html.includes('Market detail (1 year)') || html.includes('جزئیات بازار (یک سال)'), `${lang}/${slug}: info title`);
+      assert.ok(html.includes('<table'), `${lang}/${slug}: month table`);
+    }
+  }
+  const js = readFileSync(path.join(root, 'src/market.js'), 'utf8');
+  assert.ok(!/fetch\([^)]*(volatility|history|length=(2|3|4))/.test(js), 'market.js fetches no history');
+});
+
+// ---- tile freshness: purple unless the source sent an update within a minute ----
+import { freshness, FRESH_WITHIN_MS } from '../src/stale.js';
+import { parseGoldApiPrice as parseGoldApi } from '../src/live-parse.js';
+import { parseTgjuLive } from '../src/live-parse.js';
+
+test('freshness: fresh only with a valid source time less than a minute old', () => {
+  const now = 1_000_000_000;
+  assert.deepEqual(freshness(now / 1000 - 10, now), { fresh: true, reason: 'ok' });
+  assert.equal(freshness(now / 1000 - 59, now).fresh, true);
+  assert.equal(freshness(now / 1000 - 61, now).fresh, false);            // older than a minute
+  assert.equal(freshness(now / 1000 - 60, now).fresh, true);             // boundary: exactly one minute
+  assert.equal(freshness(now / 1000 + 120, now).reason, 'future');       // timestamp in the future
+  assert.equal(freshness(null, now).reason, 'no-time');                  // daily rows, navasan: no time
+  assert.equal(freshness(undefined, now).fresh, false);                  // source missing
+  assert.equal(FRESH_WITHIN_MS, 60_000);
+});
+
+test('gold-api parser keeps the source update time in seconds', () => {
+  const r = parseGoldApi({ price: 4166.1, updatedAt: '2026-10-17T07:42:40Z' }, 'XAU');
+  assert.equal(r.XAU.v, 4166.1);
+  assert.equal(r.XAU.t, Date.parse('2026-10-17T07:42:40Z') / 1000);
+  assert.deepEqual(parseGoldApi({ price: 4166.1 }, 'XAU'), { XAU: { v: 4166.1 } });
+  assert.deepEqual(parseGoldApi({ price: 0, updatedAt: '2026-10-17T07:42:40Z' }, 'XAU'), {});
+});
+
+test('tiles: freshness is wired into the refresh on the final event; purple style and strings exist', () => {
+  const home = readFileSync(path.join(PUB, 'en/index.html'), 'utf8');
+  assert.ok(/data-tick="[A-Z]+"[^>]*data-v="[^"]+" data-bt="\d+"/.test(home), 'home tiles carry value and build time');
+  assert.ok(existsSync(path.join(PUB, 'js/stale.js')), 'stale.js copied to public');
+  const refresh = readFileSync(path.join(root, 'src/refresh.js'), 'utf8');
+  assert.ok(refresh.includes("from './stale.js'") && refresh.includes('paintTile(el, row)') && refresh.includes('updateTicker(view);'), 'refresh applies the rule on every round');
+  assert.ok(refresh.includes('freshness(row?.t, Date.now())'), 'freshness uses the source timestamp');
+  assert.ok(refresh.includes("'mr-last-live-v1'") && refresh.includes('saveLast(view)') && refresh.includes('const view = viewOf(r.a)'), 'last live quote is kept and restored');
+  assert.ok(refresh.includes('lastAt') && home.includes('"lastAt"'), 'last-live label string');
+  assert.ok(home.includes('"noTime"'), 'no-time label string');
+  const liveSrc = readFileSync(path.join(root, 'src/live.js'), 'utf8');
+  assert.ok(liveSrc.includes("NAVASAN_OVER_DAILY = new Set(['COIN', 'COINH', 'COINQ'])"), 'coins keep the current navasan price over the daily TGJU row');
+  const css = readFileSync(path.join(root, 'src/style.css'), 'utf8');
+  assert.ok(css.includes('.tick.is-stale') && css.includes('#f3e8ff'), 'light purple style');
+  assert.ok(home.includes('"staleTile"') && home.includes('"liveAt"') && home.includes('A tile turns light purple'), 'refresh strings and note');
+});
+
+test('live: TGJU live feed (via proxy) parses to toman with source time and signed change', () => {
+  const j = { current: {
+    sekee: { p: '2,674,950,000', dp: 0.9, dt: 'low', ts: '2026-10-17 13:16:24' },
+    bourse: { p: '8,265,162.8', dp: 1.94, dt: 'low', ts: '2026-10-17 13:15:06' },
+    price_dollar_rl: { p: '2,648,000', dp: 1.22, dt: 'high', ts: '2026-10-17 13:16:14' },
+    oil_brent: { p: '109.86', dp: 0, dt: 'eq', ts: '2026-10-17 04:51:30' },
+  } };
+  const r = parseTgjuLive(j);
+  assert.equal(r.COIN.v, 267495000, 'rial -> toman');
+  assert.equal(r.COIN.c, -0.9, 'low means down');
+  assert.equal(r.COIN.t, Date.parse('2026-10-17T13:16:24+03:30') / 1000, 'Tehran time');
+  assert.equal(r.TEDPIX.v, 8265162.8, 'index not scaled');
+  assert.equal(r.USDIRR.c, 1.22, 'high means up');
+  assert.equal(r.BRENT.v, 109.86);
+  assert.deepEqual(parseTgjuLive({}), {}, 'empty payload gives nothing');
+  assert.deepEqual(parseTgjuLive({ current: { sekee: { p: 'n/a' } } }), {}, 'bad price is skipped');
+});
+
+test('live: proxy URL and the TGJU live source are wired into the round', () => {
+  const live = readFileSync(path.join(root, 'src/live.js'), 'utf8');
+  assert.ok(live.includes("TGJU_LIVE_URL = 'https://tgju-proxy.rfanisani.workers.dev/'"), 'proxy URL');
+  assert.ok(live.includes("'tgju-live': (ms) => getJson(TGJU_LIVE_URL"), 'source registered');
+  assert.ok(live.includes("const PRIORITY = ['navasan', 'frankfurter', 'gold-api', 'tgju', 'tgju-live']"), 'last in priority');
+  assert.ok(existsSync(path.join(root, 'proxy/tgju-proxy.worker.js')), 'proxy source is kept in the repo');
+});
+
+
+test('USD relation: linear solver and OLS recover known coefficients', () => {
+  const x = solveLinear([[2, 1], [1, 3]], [3, 5]);
+  assert.ok(Math.abs(x[0] - 0.8) < 1e-9 && Math.abs(x[1] - 1.4) < 1e-9);
+  assert.equal(solveLinear([[1, 2], [2, 4]], [1, 2]), null, 'singular system returns null');
+  const rows = [], y = [];
+  for (let i = 0; i < 40; i++) {
+    const a = 250000 + ((i * 7919) % 997) * 30, c = 270000 + ((i * 104729) % 991) * 45;
+    rows.push([a, c, 1]); y.push(1.2 * a - 0.1 * c + 5000);
+  }
+  const b = olsFit(rows, y);
+  assert.ok(Math.abs(b[0] - 1.2) < 1e-6 && Math.abs(b[1] + 0.1) < 1e-6 && Math.abs(b[2] - 5000) < 1e-3, JSON.stringify(b));
+});
+
+test('USD relation: signal follows the user rule (above = sell, below = buy)', () => {
+  const samples = [];
+  for (let i = 0; i < 60; i++) {
+    const a = 250000 + i * 300 + (i % 7) * 900, c = 270000 + (i % 5) * 1200 - i * 150;
+    samples.push({ i18: a, icoin: c, usd: 1.2 * a - 0.1 * c + 5000 + (((i * 37) % 11) - 5) * 40 });
+  }
+  const rel = usdRelationFit(samples);
+  assert.ok(rel && rel.n === 60 && rel.sd > 0);
+  const base = samples[10];
+  const fair = relationFair(rel, base);
+  assert.ok(Math.abs(fair - (1.2 * base.i18 - 0.1 * base.icoin + 5000)) < 300);
+  const above = relationSignal(rel, { usd: fair * 1.05, i18: base.i18, icoin: base.icoin });
+  const below = relationSignal(rel, { usd: fair * 0.95, i18: base.i18, icoin: base.icoin });
+  assert.equal(above.signal, 'sell');
+  assert.equal(below.signal, 'buy');
+  assert.equal(above.strong, true);
+  assert.equal(relationSignal(rel, { usd: null, i18: base.i18, icoin: base.icoin }), null);
+  assert.equal(usdRelationFit(samples.slice(0, 5)), null, 'too few samples gives no relation');
+  const bt = relationBacktest(samples, 5, 30);
+  assert.ok(bt.total > 0 && bt.rate >= 0 && bt.rate <= 100);
+});
+
+test('USD relation: built home page shows three curves and the signal card', () => {
+  const html = readFileSync(path.join(root, 'public/en/index.html'), 'utf8');
+  assert.ok(html.includes('class="rel"') && html.includes('data-sig="'), 'relation card present');
+  assert.ok(html.includes('#16a34a'), 'implied coin curve present');
+  assert.ok(html.includes('data-rel-a="'), 'coefficients embedded for live refresh');
+});
+
+// --- Gold buy / sell ---------------------------------------------------------
+import { tomanPerGram, buyTotal, sellTotal, karatOf, PURITY_MIN, PURITY_MAX } from '../src/calc.js';
+
+test('karat equivalent of purity', () => {
+  assert.equal(karatOf(1000), 24);
+  assert.equal(karatOf(750), 18);
+  assert.equal(karatOf(500), 12);
+});
+
+test('toman per gram: 18K from ounce and USD rate', () => {
+  // 4166 USD/oz, 267405 toman/USD, purity 750 -> 4166 / 31.1034768 * 0.75 * 267405
+  const expected = (4166 / OUNCE_GRAMS) * 0.75 * 267405;
+  assert.ok(Math.abs(tomanPerGram({ ounceUsd: 4166, usdToman: 267405, purity: 750 }) - expected) < 1e-6);
+  // 24K (1000) is the full ounce price per gram; 500 is half
+  const full = tomanPerGram({ ounceUsd: 4166, usdToman: 267405, purity: 1000 });
+  assert.ok(Math.abs(full - (4166 / OUNCE_GRAMS) * 267405) < 1e-6);
+  assert.ok(Math.abs(tomanPerGram({ ounceUsd: 4166, usdToman: 267405, purity: 500 }) - full / 2) < 1e-6);
+});
+
+test('toman per gram rejects out-of-range inputs', () => {
+  assert.equal(PURITY_MIN, 500);
+  assert.equal(PURITY_MAX, 1000);
+  assert.equal(tomanPerGram({ ounceUsd: 4166, usdToman: 267405, purity: 499 }), null);
+  assert.equal(tomanPerGram({ ounceUsd: 4166, usdToman: 267405, purity: 1001 }), null);
+  assert.equal(tomanPerGram({ ounceUsd: 0, usdToman: 267405, purity: 750 }), null);
+  assert.equal(tomanPerGram({ ounceUsd: 4166, usdToman: NaN, purity: 750 }), null);
+});
+
+test('buy: value plus seller wage', () => {
+  const r = buyTotal({ grams: 2, perGram: 1000000, wagePct: 5 });
+  assert.equal(r.base, 2000000);
+  assert.equal(r.wage, 100000);
+  assert.equal(r.total, 2100000);
+  assert.equal(buyTotal({ grams: 1, perGram: 1000000, wagePct: 0 }).total, 1000000);
+  assert.equal(buyTotal({ grams: 1, perGram: 1000000, wagePct: 31 }), null);
+  assert.equal(buyTotal({ grams: 0, perGram: 1000000, wagePct: 5 }), null);
+});
+
+test('sell: value minus shop deduction, 0-10 %', () => {
+  const r = sellTotal({ grams: 2, perGram: 1000000, feePct: 10 });
+  assert.equal(r.base, 2000000);
+  assert.equal(r.fee, 200000);
+  assert.equal(r.total, 1800000);
+  assert.equal(sellTotal({ grams: 1, perGram: 1000000, feePct: 0 }).total, 1000000);
+  assert.equal(sellTotal({ grams: 1, perGram: 1000000, feePct: 10.5 }), null);
+  assert.equal(sellTotal({ grams: 1, perGram: 1000000, feePct: -1 }), null);
+});
+
+test('trade page is built with the tab, defaults and the script', () => {
+  const en = readFileSync(path.join(root, 'public/en/trade/index.html'), 'utf8');
+  const fa = readFileSync(path.join(root, 'public/fa/trade/index.html'), 'utf8');
+  assert.ok(en.includes('value="750"') && fa.includes('value="750"'), 'purity default 750');
+  assert.ok(en.includes('id="useLive"') && en.includes('js/trade.js'), 'live reset and script present');
+  assert.ok(readFileSync(path.join(root, 'public/en/index.html'), 'utf8').includes('href="trade/"'), 'top navigation tab present');
+  assert.ok(fa.includes('خرید و فروش طلا'), 'Persian tab label present');
 });

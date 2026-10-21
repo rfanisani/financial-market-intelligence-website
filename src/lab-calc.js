@@ -6,6 +6,21 @@
 // missing, malformed, or insufficient — callers must show a localized error
 // instead of a fabricated result.
 
+/** Time windows offered by the lab, in calendar days (matches data/history-*.json). */
+export const LAB_WINDOWS = Object.freeze([7, 30, 365]);
+
+/**
+ * Map a raw form value to a supported window. Unknown or missing values fall
+ * back to 7 days. Used by the browser UI so "1 year" (365) is never silently
+ * replaced by the 7-day series.
+ * @param {unknown} value
+ * @returns {7|30|365}
+ */
+export function resolveWindow(value) {
+  const n = Number(value);
+  return LAB_WINDOWS.includes(n) ? n : 7;
+}
+
 /**
  * Validate a price series: at least two finite, strictly positive numbers.
  * @param {unknown} values
@@ -169,5 +184,132 @@ export function compareAssets(a, b) {
     correlation: correlation(a, b),
     a: na,
     b: nb,
+  };
+}
+
+/**
+ * Moving-average signal backtest (gross, no fees or taxes).
+ *   state = 1 (in market) when the close is above its n-day moving average, else 0.
+ *   The position decided at close t earns the return from t to t+1.
+ *   Buy = state turns 1, sell = state turns 0. Trades are measured close-to-close.
+ * @param {unknown} values  daily closes
+ * @param {unknown} window  moving-average window (>= 2, < length - 1)
+ * @returns {object|null}
+ */
+export function signalBacktest(values, window) {
+  const v = cleanSeries(values);
+  const s = sma(values, window);
+  if (!v || !s) return null;
+  const n = v.length;
+  const start = window - 1;
+  if (n - start < 3) return null;
+
+  const signals = [];
+  const trades = [];
+  let state = 0, entry = null;
+  let strat = 1, bh = 1, hits = 0, longDays = 0;
+  const equity = [1];
+  const bhSeries = [1];
+
+  for (let t = start; t < n; t++) {
+    const above = v[t] > s[t] ? 1 : 0;
+    if (above !== state) {
+      state = above;
+      if (state === 1) {
+        entry = t;
+        signals.push({ i: t, type: 'buy' });
+      } else {
+        trades.push({ entry, exit: t, retPct: (v[t] / v[entry] - 1) * 100, win: v[t] > v[entry], open: false });
+        entry = null;
+        signals.push({ i: t, type: 'sell' });
+      }
+    }
+    if (t < n - 1) {
+      const r = v[t + 1] / v[t] - 1;
+      strat *= 1 + state * r;
+      bh *= 1 + r;
+      if (state === 1 && r !== 0) { longDays++; if (r > 0) hits++; }
+      equity.push(strat);
+      bhSeries.push(bh);
+    }
+  }
+  if (entry !== null) {
+    trades.push({ entry, exit: n - 1, retPct: (v[n - 1] / v[entry] - 1) * 100, win: v[n - 1] > v[entry], open: true });
+  }
+
+  const closed = trades.filter((t) => !t.open);
+  const wins = closed.filter((t) => t.win).length;
+  const last = n - 1;
+  return {
+    window,
+    start,
+    sma: s,
+    signals,
+    trades,
+    closedCount: closed.length,
+    wins,
+    winRate: closed.length ? (wins / closed.length) * 100 : null,
+    avgTradePct: closed.length ? closed.reduce((a, t) => a + t.retPct, 0) / closed.length : null,
+    openPosition: entry !== null,
+    strategyPct: (strat - 1) * 100,
+    buyHoldPct: (v[last] / v[start] - 1) * 100,
+    hitLong: { hits, n: longDays, pct: longDays ? (hits / longDays) * 100 : null },
+    equity,            // strategy growth index from `start`
+    buyHold: bhSeries, // buy & hold growth index from `start`
+    current: { inMarket: state === 1, last: v[last], sma: s[last], vsSmaPct: (v[last] / s[last] - 1) * 100 },
+  };
+}
+
+/**
+ * Moving-average regimes: how often the price sat above or below its moving
+ * average, and how long each stretch on one side lasted (in data points).
+ * Days where the price equals the average are skipped and do not end a stretch.
+ * `runs` lists only finished stretches; `current` is the stretch still open at the end.
+ * @param {unknown} values
+ * @param {unknown} window
+ * @returns {{window: number, n: number, aboveDays: number, belowDays: number,
+ *   abovePct: number, belowPct: number,
+ *   above: {runs: number, avg: number|null, max: number|null},
+ *   below: {runs: number, avg: number|null, max: number|null},
+ *   current: {side: string, len: number}|null}|null}
+ */
+export function smaRegimes(values, window) {
+  const v = cleanSeries(values);
+  const s = sma(values, window);
+  if (!v || !s) return null;
+  let n = 0, aboveDays = 0, belowDays = 0;
+  const closed = { above: [], below: [] };
+  let side = null, len = 0;
+  for (let i = 0; i < v.length; i++) {
+    const m = s[i];
+    if (!Number.isFinite(m)) continue;
+    const st = v[i] > m ? 'above' : v[i] < m ? 'below' : null;
+    if (!st) continue;
+    n++;
+    if (st === 'above') aboveDays++; else belowDays++;
+    if (st === side) {
+      len++;
+    } else {
+      if (side) closed[side].push(len);
+      side = st;
+      len = 1;
+    }
+  }
+  if (n === 0) return null;
+  const summary = (runs) => ({
+    runs: runs.length,
+    avg: runs.length ? runs.reduce((a, b) => a + b, 0) / runs.length : null,
+    max: runs.length ? Math.max(...runs) : null,
+  });
+  return {
+    window,
+    n,
+    aboveDays,
+    belowDays,
+    abovePct: (aboveDays / n) * 100,
+    belowPct: (belowDays / n) * 100,
+    above: summary(closed.above),
+    below: summary(closed.below),
+    current: side ? { side, len } : null,
   };
 }
