@@ -996,15 +996,27 @@ test('trade page is built with the tab, defaults and the script', () => {
 });
 
 // --- Default moving-average window for the signal tool -----------------------
-test('bestSignalWindow: rule on the one-year gold 18K series', () => {
-  const hist = JSON.parse(readFileSync(path.join(root, 'data/history-1y.json'), 'utf8'));
+test('bestSignalWindow: rule on a frozen one-year gold 18K series', () => {
+  // Frozen fixture: deterministic, independent of live market data.
+  const hist = JSON.parse(readFileSync(path.join(root, 'scripts/fixtures/au18-1y.json'), 'utf8'));
   const best = bestSignalWindow(hist.a.AU18);
   assert.ok(best, 'a window is found');
-  assert.equal(best.window, 33, 'gold 18K default window');
+  assert.equal(best.window, 33, 'gold 18K default window on frozen data');
   assert.ok(best.trades >= 5, 'at least 5 closed trades');
   assert.ok(best.window >= 2 && best.window <= hist.a.AU18.length - 4);
   // the reported strategy return is the backtest's own value for that window
   assert.ok(Math.abs(best.strategyPct - signalBacktest(hist.a.AU18, best.window).strategyPct) < 1e-9);
+});
+
+test('bestSignalWindow: live one-year data gives a valid result (value not fixed)', () => {
+  // Live data changes every fetch, so only check that the rule returns a sane result.
+  const hist = JSON.parse(readFileSync(path.join(root, 'data/history-1y.json'), 'utf8'));
+  const best = bestSignalWindow(hist.a.AU18);
+  if (best === null) return; // allowed if the live series is too short or has too few trades
+  assert.ok(Number.isInteger(best.window), 'window is an integer');
+  assert.ok(best.window >= 2 && best.window <= hist.a.AU18.length - 4, 'window in range');
+  assert.ok(best.trades >= 5, 'at least 5 closed trades');
+  assert.ok(Number.isFinite(best.strategyPct), 'strategy return is finite');
 });
 
 test('bestSignalWindow: rejects invalid or too-short input', () => {
