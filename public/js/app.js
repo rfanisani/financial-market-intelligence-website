@@ -1,3 +1,4 @@
+import { bindSubmitButtons } from './forms.js';
 // Calculator page logic. The formula itself lives in calc.js (single source).
 import { impliedUsd, difference, expectedDomesticPrice } from './calc.js';
 
@@ -39,3 +40,6 @@ $('f2').addEventListener('submit', (e) => {
   if (!expected) { out.innerHTML = `<p class="error">${L.err}</p>`; return; }
   out.innerHTML = `<div class="result"><b class="num">${nf.format(expected)}</b> ${L.toman}/${L.gram}</div>`;
 });
+
+// Submit buttons work in sandboxed previews too (see forms.js).
+bindSubmitButtons();
