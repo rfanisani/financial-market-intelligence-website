@@ -1,3 +1,4 @@
+import { bindSubmitButtons } from './forms.js';
 // Financial Intelligence Lab — browser module for /fa/lab/ and /en/lab/.
 // All calculations come from lab-calc.js (shared with the Node test suite);
 // this file only wires the form, renders localized results, and draws inline
@@ -6,7 +7,7 @@
 // anywhere: every calculation happens locally in the browser.
 import {
   simpleReturns, periodReturn, volatility, maxDrawdown,
-  sma, trendSignal, compareAssets,
+  sma, trendSignal, compareAssets, resolveWindow, signalBacktest, smaRegimes, bestSignalWindow,
 } from './lab-calc.js';
 
 const $ = (id) => document.getElementById(id);
@@ -29,6 +30,17 @@ const seriesFor = (code, w) => {
   if (w === 30) return byCode[code].s30;
   return byCode[code].s7;
 };
+// Default moving-average window per asset for the signal tool: the best window on the
+// 1-year data (rule in bestSignalWindow). Computed in the browser, once per asset.
+const defaultMaCache = {};
+const defaultMaFor = (code) => {
+  if (!(code in defaultMaCache)) {
+    const s365 = seriesFor(code, 365);
+    const best = s365 ? bestSignalWindow(s365) : null;
+    defaultMaCache[code] = best ? best.window : 30;
+  }
+  return defaultMaCache[code];
+};
 const metaFor = (w) => (w === 365 ? D.w365 : (w === 30 ? D.w30 : D.w7));
 const unit = (a) => (a.unit ? ` <small class="u">${esc(a.unit)}</small>` : '');
 
@@ -36,7 +48,7 @@ const unit = (a) => (a.unit ? ` <small class="u">${esc(a.unit)}</small>` : '');
 function metaLine(assets, w, seriesLen) {
   const m = metaFor(w);
   const range = fill(L.windowRange, { start: fmtDate(m.t0), end: fmtDate(m.t0 + m.dt * (seriesLen - 1)) });
-  const srcs = assets.map((a) => fill(L.source, { src: a.src })).join(' · ');
+  const srcs = [...new Set(assets.map((a) => a.src))].map((src) => fill(L.source, { src })).join(' · ');
   return `<p class="muted">${esc(range)} · ${esc(srcs)}</p>`;
 }
 
@@ -102,6 +114,34 @@ function renderRisk(a, s, w) {
   </div>`;
 }
 
+// Above/below-average shares and stretch lengths for the 1-year series.
+// Always uses the 1-year data (not the selected window), with the same MA window
+// clamped to that series.
+function regimeCard(a, req) {
+  const y = a.s365;
+  if (!Array.isArray(y) || y.length < 3) return '';
+  const win = Number.isFinite(req) ? Math.max(2, Math.min(Math.floor(req), y.length - 1)) : 2;
+  const r = smaRegimes(y, win);
+  if (!r) return '';
+  const stretch = (x) => (x.runs
+    ? fill(L.regimeStretch, { avg: fmtNum(x.avg, 1), max: fmtNum(x.max, 0), runs: fmtNum(x.runs, 0) })
+    : L.regimeNoRuns);
+  const cur = r.current
+    ? fill(L.regimeCurrentFmt, { side: r.current.side === 'above' ? L.regimeSideAbove : L.regimeSideBelow, n: fmtNum(r.current.len, 0) })
+    : '—';
+  return `<div class="regime">
+    <h3>${esc(fill(L.regimeTitle, { w: fmtNum(win, 0) }))}</h3>
+    <dl class="kv">
+      <dt>${esc(L.regimeAbove)}</dt><dd class="num">${fmtNum(r.abovePct, 1)}% · ${fmtNum(r.aboveDays, 0)}</dd>
+      <dt>${esc(L.regimeBelow)}</dt><dd class="num">${fmtNum(r.belowPct, 1)}% · ${fmtNum(r.belowDays, 0)}</dd>
+      <dt>${esc(L.regimeRunAbove)}</dt><dd>${esc(stretch(r.above))}</dd>
+      <dt>${esc(L.regimeRunBelow)}</dt><dd>${esc(stretch(r.below))}</dd>
+      <dt>${esc(L.regimeCurrent)}</dt><dd>${esc(cur)}</dd>
+    </dl>
+    <p class="muted">${esc(fill(L.regimeNote, { n: fmtNum(r.n, 0) }))}</p>
+  </div>`;
+}
+
 function renderTrend(a, s, w) {
   if (s.length < 3) return showError(L.insufficient);
   const req = Number($('lab-ma').value);
@@ -128,6 +168,7 @@ function renderTrend(a, s, w) {
       <dt>${esc(L.trendLabel)}</dt><dd class="${cls(tr.vsSmaPct)}">${esc(dirLabel)}</dd>
       <dt>${esc(L.points)}</dt><dd class="num">${s.length}</dd>
     </dl>
+    ${regimeCard(a, req)}
     ${metaLine([a], w, s.length)}
   </div>`;
 }
@@ -158,9 +199,91 @@ function renderCompare(a, b, sa, sb, w) {
   </div>`;
 }
 
+// One chart for the whole signal analysis. All four series share one time axis:
+// the left edge is day `start` (first day with a moving average), the right edge is the last day.
+//   left axis  : price and moving average (asset units)
+//   right axis : cumulative return of the strategy and of buy & hold (%)
+// Buy (▲) and sell (▼) markers sit on the price line.
+function signalChart(r, series, ariaLabel, decimals) {
+  const w = 560, h = 230, pad = 12;
+  const n = series.length, start = r.start;
+  const x = (i) => pad + ((i - start) / (n - 1 - start)) * (w - 2 * pad);
+
+  const priceVals = [...series.slice(start), ...r.sma.slice(start)].filter((v) => Number.isFinite(v));
+  const pMin = Math.min(...priceVals), pMax = Math.max(...priceVals), pSpan = pMax - pMin || 1;
+  const yP = (v) => h - pad - ((v - pMin) / pSpan) * (h - 2 * pad);
+
+  const eq = r.equity.map((e) => (e - 1) * 100);      // length n - start
+  const bh = r.buyHold.map((b) => (b - 1) * 100);     // length n - start
+  const retVals = [0, ...eq, ...bh].filter((v) => Number.isFinite(v));
+  const rMin = Math.min(...retVals), rMax = Math.max(...retVals), rSpan = rMax - rMin || 1;
+  const yR = (v) => h - pad - ((v - rMin) / rSpan) * (h - 2 * pad);
+
+  // arr[k] is the value on day start + k
+  const line = (arr, color, yFn, dash) =>
+    `<polyline fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"${dash ? ` stroke-dasharray="${dash}"` : ''} points="${
+      arr.map((v, k) => (Number.isFinite(v) ? `${x(start + k).toFixed(1)},${yFn(v).toFixed(1)}` : '')).filter(Boolean).join(' ')
+    }"/>`;
+
+  const markers = r.signals.map(({ i, type }) => {
+    const cx = x(i).toFixed(1), cy = yP(series[i]).toFixed(1);
+    return type === 'buy'
+      ? `<polygon points="${cx},${(cy - 9).toFixed(1)} ${(+cx - 6).toFixed(1)},${(+cy - 1).toFixed(1)} ${(+cx + 6).toFixed(1)},${(+cy - 1).toFixed(1)}" fill="#16a34a"/>`
+      : `<polygon points="${cx},${(+cy + 9).toFixed(1)} ${(+cx - 6).toFixed(1)},${(+cy + 1).toFixed(1)} ${(+cx + 6).toFixed(1)},${(+cy + 1).toFixed(1)}" fill="#dc2626"/>`;
+  }).join('');
+
+  const zeroY = yR(0).toFixed(1);
+  const lbl = (xx, yy, txt, anchor = 'start') =>
+    `<text x="${xx}" y="${yy}" font-size="10" text-anchor="${anchor}" fill="currentColor" fill-opacity=".55">${txt}</text>`;
+  return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(ariaLabel)}">` +
+    `<line x1="${pad}" y1="${zeroY}" x2="${w - pad}" y2="${zeroY}" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="3 3"/>` +
+    line(series.slice(start), '#3b82f6', yP) +
+    line(r.sma.slice(start), '#d97706', yP) +
+    line(eq, '#0891b2', yR) +
+    line(bh, '#6b7280', yR, '5 4') +
+    markers +
+    lbl(pad, (yP(pMax) - 4).toFixed(1), fmtNum(pMax, pMax < 10 ? 2 : decimals)) +
+    lbl(pad, (yP(pMin) + 12).toFixed(1), fmtNum(pMin, pMin < 10 ? 2 : decimals)) +
+    lbl(w - pad, (yR(rMax) - 4).toFixed(1), `${fmtNum(rMax, 1)}%`, 'end') +
+    lbl(w - pad, (yR(rMin) + 12).toFixed(1), `${fmtNum(rMin, 1)}%`, 'end') +
+    `</svg>`;
+}
+
+function renderSignal(a, s, w, req) {
+  const win = Math.max(2, Math.min(Number.isFinite(req) ? Math.floor(req) : 30, s.length - 3));
+  const r = signalBacktest(s, win);
+  if (!r) return showError(L.insufficient);
+  const wr = r.winRate === null ? L.sigNoTrades
+    : fill(L.sigWinRateVal, { pct: fmtNum(r.winRate, 0), wins: r.wins, n: r.closedCount });
+  const avg = r.avgTradePct === null ? '—' : fmtPct(r.avgTradePct);
+  const hit = r.hitLong.pct === null ? '—' : fill(L.sigHitVal, { pct: fmtNum(r.hitLong.pct, 1), n: r.hitLong.n });
+  const cur = r.current.inMarket ? L.sigCurrentLong : L.sigCurrentCash;
+  const curCls = r.current.inMarket ? 'up' : 'down';
+  $('lab-result').innerHTML = `<div class="result">
+    <p><b>${esc(a.name)}</b> · ${esc(fill(L.sma, { w: fmtNum(win, 0) }))}</p>
+    ${signalChart(r, s, `${a.name} — ${L.tSignal}`, a.d)}
+    ${legend([['#3b82f6', L.sigPriceLegend], ['#d97706', fill(L.sma, { w: fmtNum(win, 0) })], ['#0891b2', L.sigStrategy], ['#6b7280', L.sigBuyHold], ['#16a34a', L.sigBuyLegend], ['#dc2626', L.sigSellLegend]])}
+    <p class="muted">${esc(L.sigAxisLeft)} · ${esc(L.sigAxisRight)}</p>
+    <dl class="kv">
+      <dt>${esc(L.sigWinRate)}</dt><dd class="num">${esc(wr)}</dd>
+      <dt>${esc(L.sigAvgTrade)}</dt><dd class="num">${esc(avg)}</dd>
+      <dt>${esc(L.sigStrategyRet)}</dt><dd class="num ${cls(r.strategyPct)}">${fmtPct(r.strategyPct)}</dd>
+      <dt>${esc(L.sigBhRet)}</dt><dd class="num ${cls(r.buyHoldPct)}">${fmtPct(r.buyHoldPct)}</dd>
+      <dt>${esc(L.sigHit)}</dt><dd class="num">${esc(hit)}</dd>
+      <dt>${esc(L.sigOpen)}</dt><dd class="num">${r.openPosition ? esc(fill(L.sigOpenVal, { ret: fmtPct(r.trades[r.trades.length - 1].retPct) })) : '—'}</dd>
+      <dt>${esc(L.sigCurrent)}</dt><dd class="${curCls}">${esc(cur)} <span class="num">(${fmtPct(r.current.vsSmaPct)})</span></dd>
+      <dt>${esc(L.points)}</dt><dd class="num">${s.length}</dd>
+    </dl>
+    <p class="muted">${esc(L.sigOptNote)}</p>
+    <p class="muted">${esc(L.sigNote)}</p>
+    <p class="muted">${esc(L.mSignal)}</p>
+    ${metaLine([a], w, s.length)}
+  </div>`;
+}
+
 function runAnalysis() {
   const tool = $('lab-tool').value;
-  const w = Number($('lab-window').value) === 30 ? 30 : 7;
+  const w = resolveWindow($('lab-window').value); // 7 | 30 | 365
   if (tool === 'compare') {
     const ca = $('lab-asset-a').value, cb = $('lab-asset-b').value;
     if (ca === cb) return showError(L.sameAsset);
@@ -176,6 +299,7 @@ function runAnalysis() {
   if (tool === 'return') return renderReturn(a, s, w);
   if (tool === 'risk') return renderRisk(a, s, w);
   if (tool === 'trend') return renderTrend(a, s, w);
+  if (tool === 'signal') return renderSignal(a, s, w, Number($('lab-ma').value));
   showError(L.insufficient);
 }
 
@@ -185,7 +309,7 @@ function syncToolFields() {
   $('lab-f-asset').hidden = tool === 'compare';
   $('lab-f-asset-a').hidden = tool !== 'compare';
   $('lab-f-asset-b').hidden = tool !== 'compare';
-  $('lab-f-ma').hidden = tool !== 'trend';
+  $('lab-f-ma').hidden = tool !== 'trend' && tool !== 'signal';
 }
 
 let busy = false;
@@ -204,5 +328,19 @@ $('lab-form').addEventListener('submit', (e) => {
     busy = false;
   }
 });
-$('lab-tool').addEventListener('change', syncToolFields);
+let lastTool = $('lab-tool').value;
+$('lab-tool').addEventListener('change', () => {
+  const tool = $('lab-tool').value;
+  // Signal: the per-asset default window. Trend: back to its 7-day default when coming from signal.
+  if (tool === 'signal') $('lab-ma').value = String(defaultMaFor($('lab-asset').value));
+  if (tool === 'trend' && lastTool === 'signal') $('lab-ma').value = '7';
+  lastTool = tool;
+  syncToolFields();
+});
+$('lab-asset').addEventListener('change', () => {
+  if ($('lab-tool').value === 'signal') $('lab-ma').value = String(defaultMaFor($('lab-asset').value));
+});
 syncToolFields();
+
+// Submit buttons work in sandboxed previews too (see forms.js).
+bindSubmitButtons();
