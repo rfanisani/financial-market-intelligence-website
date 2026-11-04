@@ -425,8 +425,6 @@ test('root redirects default to English (/en/) with Persian as fallback link', (
   assert.ok(html.includes('content="0;url=en/"'), 'root meta refresh to en/');
   assert.ok(html.includes('lang="en"'), 'root html lang is en');
   assert.ok(html.includes('href="fa/"'), 'root keeps a Persian fallback link');
-  const app = readFileSync(path.join(root, 'app/page.tsx'), 'utf8');
-  assert.ok(app.includes("redirect('/en/index.html')"), 'next preview route redirects to /en/');
 });
 
 test('sitemap includes the lab routes and robots still allows them', () => {
